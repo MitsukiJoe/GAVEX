@@ -1,0 +1,41 @@
+# OS & Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
+
+# Private Agent Context & Intermediate State (Never commit to public repo)
+AGENTS.md
+SOUL.md
+USER.md
+MEMORY.md
+IDENTITY.md
+HEARTBEAT.md
+TOPICS.md
+TODO.md
+GEMINI.md
+CLAUDE.md
+CURSOR.md
+STATUS.md
+.agent-state*
+.agentsxco/
+.gavex/
+.tri/
+harness-binding.json
+*.sqlite
+*.sqlite-*
+*.db
+
+# Test & Build Artifacts / Backups
+node_modules/
+.verify/
+.backup/
+*.bak
+*.tmp
+*.log
+scripts/e2e-report.json
+
+# Local-only internal design & verification docs
+.local/

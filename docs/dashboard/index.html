@@ -1,0 +1,1366 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GAVEX · Guarded Audit &amp; Verifier-gated Execution — 执行看板</title>
+<meta name="description" content="GAVEX — Guarded Audit &amp; Verifier-gated Execution dashboard: KPI, live progress, watchdog timeline and stage-gate swimlanes.">
+<script>
+  (function () {
+    try {
+      var t = new URLSearchParams(location.search).get('theme') || localStorage.getItem('gavex-theme');
+      if (t !== 'light' && t !== 'dark') t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    } catch (e) {}
+  })();
+</script>
+<style>
+  :root {
+    --font: Inter, "SF Pro Text", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+    --mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    --r-chip: 6px; --r-card: 10px; --r-panel: 14px;
+    --blue: #3b82f6; --green: #10b981; --amber: #f59e0b; --rose: #f43f5e; --violet: #8b5cf6;
+    --blue-bd: rgba(59,130,246,.30);  --blue-bg: rgba(59,130,246,.06);
+    --green-bd: rgba(16,185,129,.32); --green-bg: rgba(16,185,129,.06);
+    --amber-bd: rgba(245,158,11,.36); --amber-bg: rgba(245,158,11,.07);
+    --rose-bd: rgba(244,63,94,.34);   --rose-bg: rgba(244,63,94,.07);
+    --violet-bd: rgba(139,92,246,.30);--violet-bg: rgba(139,92,246,.06);
+    --ease: cubic-bezier(.2,.8,.2,1);
+  }
+  html[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0a0c10; --s1: #0f1218; --s2: #141821; --s3: #1a1f2a;
+    --line: rgba(148,163,184,.14); --line-strong: rgba(148,163,184,.26);
+    --fg: #e7eaf0; --fg-2: #a1aab9; --fg-3: #7c8598;
+    --blue-fg: #93c5fd; --green-fg: #6ee7b7; --amber-fg: #fcd34d; --rose-fg: #fda4af; --violet-fg: #c4b5fd;
+    --btn-fg: #0a0c10;
+  }
+  html[data-theme="light"] {
+    color-scheme: light;
+    --bg: #f5f6f8; --s1: #ffffff; --s2: #fafbfc; --s3: #f1f3f6;
+    --line: rgba(15,23,42,.08); --line-strong: rgba(15,23,42,.16);
+    --fg: #0f172a; --fg-2: #475569; --fg-3: #64748b;
+    --blue-fg: #1d4ed8; --green-fg: #047857; --amber-fg: #b45309; --rose-fg: #be123c; --violet-fg: #6d28d9;
+    --btn-fg: #ffffff;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font: 14px/1.55 var(--font);
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+    transition: background-color .16s ease-out, color .16s ease-out;
+  }
+  code, .mono { font-family: var(--mono); }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:disabled { cursor: not-allowed; opacity: .45; }
+  :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 6px; }
+  h1, h2, h3, h4, p { margin: 0; }
+  ul, ol { margin: 0; padding: 0; list-style: none; }
+  .wrap { max-width: 1440px; margin: 0 auto; padding: 0 24px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ---------- icons ---------- */
+  .ic { width: 16px; height: 16px; flex: none; display: block; }
+  .ic.sm { width: 14px; height: 14px; }
+  .spin { animation: rot .9s linear infinite; }
+  .c-blue { color: var(--blue); } .c-green { color: var(--green); } .c-amber { color: var(--amber); }
+  .c-rose { color: var(--rose); } .c-violet { color: var(--violet); } .c-mute { color: var(--fg-3); }
+  @keyframes rot { to { transform: rotate(360deg); } }
+
+  /* ---------- pills & stamps ---------- */
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    min-height: 22px; padding: 0 8px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--s3); color: var(--fg-2);
+    font-size: 11.5px; font-weight: 500; line-height: 1.2; white-space: nowrap;
+  }
+  .pill.xs { min-height: 20px; padding: 0 7px; font-size: 11px; }
+  .pill.mono { font-family: var(--mono); font-size: 11px; letter-spacing: -.01em; }
+  .pill.multi { white-space: normal; max-width: 100%; padding-top: 3px; padding-bottom: 3px; word-break: break-all; }
+  .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+  .pill.blue   { color: var(--blue-fg);   border-color: var(--blue-bd);   background: var(--blue-bg); }
+  .pill.green  { color: var(--green-fg);  border-color: var(--green-bd);  background: var(--green-bg); }
+  .pill.amber  { color: var(--amber-fg);  border-color: var(--amber-bd);  background: var(--amber-bg); }
+  .pill.rose   { color: var(--rose-fg);   border-color: var(--rose-bd);   background: var(--rose-bg); }
+  .pill.violet { color: var(--violet-fg); border-color: var(--violet-bd); background: var(--violet-bg); }
+  .pill.ghost  { background: transparent; }
+  .stamp {
+    display: inline-flex; align-items: center; gap: 6px; min-height: 22px; padding: 0 9px;
+    border-radius: 999px; border: 1px solid var(--green-bd); background: var(--green-bg); color: var(--green-fg);
+    font: 600 11px/1.2 var(--mono); letter-spacing: .01em; white-space: nowrap;
+  }
+  .stamp.violet { border-color: var(--violet-bd); background: var(--violet-bg); color: var(--violet-fg); }
+  .stamp.fresh { animation: stamp .26s cubic-bezier(.2,.9,.3,1.2); }
+  @keyframes stamp { from { transform: scale(1.3) rotate(-4deg); opacity: 0; } to { transform: none; opacity: 1; } }
+
+  /* ---------- buttons ---------- */
+  .btn {
+    display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px;
+    border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--fg);
+    font-size: 13px; font-weight: 500; white-space: nowrap;
+    transition: background-color .16s ease-out, border-color .16s ease-out;
+  }
+  .btn:hover:not(:disabled) { background: var(--s3); border-color: var(--line-strong); }
+  .btn.primary { background: var(--fg); color: var(--btn-fg); border-color: var(--fg); }
+  .btn.primary:hover:not(:disabled) { background: var(--fg); opacity: .9; }
+  .btn.sm { height: 28px; padding: 0 10px; font-size: 12px; }
+  .btn.icon { width: 32px; padding: 0; justify-content: center; }
+  .seg { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 9px; background: var(--s1); }
+  .seg button {
+    height: 26px; padding: 0 10px; border: 1px solid transparent; border-radius: 7px; background: transparent;
+    color: var(--fg-2); font-size: 12px; font-weight: 500; white-space: nowrap;
+    transition: background-color .16s ease-out, color .16s ease-out;
+  }
+  .seg button:hover { color: var(--fg); }
+  .seg button[aria-pressed="true"] { background: var(--s3); color: var(--fg); border-color: var(--line); }
+  .seg button .mono { font-family: var(--mono); font-weight: 600; }
+  .seg button small { color: var(--fg-3); font-size: 11px; margin-left: 4px; }
+
+  /* ---------- top bar ---------- */
+  .top { position: sticky; top: 0; z-index: 30; background: var(--bg); border-bottom: 1px solid var(--line); }
+  .top .wrap { display: flex; align-items: center; gap: 16px; min-height: 60px; flex-wrap: wrap; padding-top: 10px; padding-bottom: 10px; }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand b { font-size: 15px; letter-spacing: -.01em; }
+  .brand span { color: var(--fg-3); font-size: 12px; }
+  .run { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+  .run .crumb { color: var(--fg-2); font-size: 13px; }
+  .live .dot { animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+  .actions { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+  main { padding: 20px 0 48px; }
+  main > .wrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+
+  .panel { background: var(--s1); border: 1px solid var(--line); border-radius: var(--r-panel); }
+  .panel-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 16px; }
+  .panel-head h2 { font-size: 14px; font-weight: 600; letter-spacing: -.005em; }
+  .panel-head .sub { color: var(--fg-3); font-size: 12px; }
+  .panel-head .right { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .eyebrow { font: 600 10.5px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--fg-3); }
+
+  /* ---------- A · KPI ---------- */
+  .kpi-grid {
+    display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1px;
+    background: var(--line); border-top: 1px solid var(--line);
+    border-radius: 0 0 var(--r-panel) var(--r-panel); overflow: hidden;
+  }
+  .kpi { background: var(--s1); padding: 16px 18px 18px; min-width: 0; }
+  .kpi .label { font-size: 12px; color: var(--fg-3); letter-spacing: .02em; }
+  .kpi .val { display: flex; align-items: baseline; gap: 6px; margin-top: 6px; }
+  .kpi .val b { font-size: 30px; line-height: 1.1; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .kpi .val span { color: var(--fg-2); font-size: 13px; }
+  .kpi .note { margin-top: 6px; color: var(--fg-2); font-size: 12px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-height: 22px; }
+  .bar { height: 4px; border-radius: 999px; background: var(--s3); overflow: hidden; margin-top: 10px; }
+  .bar i { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--green); transition: width .4s var(--ease); }
+  .bar.blue i { background: var(--blue); }
+
+  /* ---------- B · progress + timeline ---------- */
+  .grid-b { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 16px; }
+  .prog-top { padding: 0 16px 14px; }
+  .prog-top .row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .prog-top .pct { font-size: 26px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .prog-top .meta { color: var(--fg-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .plist { display: grid; gap: 6px; padding: 0 12px 12px; }
+  .prow {
+    display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: 10px;
+    padding: 9px 10px; border-radius: var(--r-card); border: 1px solid var(--line); background: var(--s2);
+    transition: background-color .16s ease-out, border-color .16s ease-out, opacity .16s ease-out;
+  }
+  .prow .ic { width: 18px; height: 18px; }
+  .prow .pname { display: flex; align-items: baseline; gap: 8px; min-width: 0; font-size: 13px; font-weight: 500; }
+  .prow .pname .tag { font: 600 10.5px/1 var(--mono); color: var(--fg-3); letter-spacing: .04em; flex: none; }
+  .prow .pname .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .prow .psub { color: var(--fg-3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .prow.is-locked { opacity: .55; }
+  .prow.is-run { background: var(--blue-bg); border-color: var(--blue-bd); }
+  .prow.is-rework { background: var(--amber-bg); border-color: var(--amber-bd); }
+  .prow.is-verify { background: var(--green-bg); border-color: var(--green-bd); }
+
+  .tl-wrap { height: 488px; overflow: auto; padding: 0 16px 12px; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+  .tl-wrap::-webkit-scrollbar { width: 6px; }
+  .tl-wrap::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 6px; }
+  .tl { position: relative; }
+  .tl::before { content: ""; position: absolute; left: 7px; top: 10px; bottom: 10px; width: 1px; background: var(--line); }
+  .ev { position: relative; padding: 8px 0 10px 26px; }
+  .ev.enter { animation: evIn .16s ease-out; }
+  @keyframes evIn { from { opacity: 0; transform: translateY(-4px); } }
+  .ev .node { position: absolute; left: 3px; top: 14px; width: 9px; height: 9px; border-radius: 50%; background: var(--s1); border: 1px solid var(--fg-3); }
+  .ev.t-PASS .node { background: var(--green); border-color: var(--green); }
+  .ev.t-REJECT .node { background: var(--rose); border-color: var(--rose); }
+  .ev.t-STEER .node { background: var(--amber); border-color: var(--amber); }
+  .ev.t-SPAWN .node { border-color: var(--blue); }
+  .ev.t-VERIFY .node { border-color: var(--green); }
+  .ev.t-PATROL .node, .ev.t-PLAN .node, .ev.t-AUDIT .node { border-color: var(--violet); }
+  .ev-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .ev-top time { font: 500 11.5px/1 var(--mono); color: var(--fg-3); font-variant-numeric: tabular-nums; }
+  .ev-top .step { font-size: 11.5px; color: var(--fg-3); }
+  .ev code {
+    display: inline-block; margin-top: 6px; padding: 3px 8px; max-width: 100%;
+    font-size: 12px; color: var(--fg); background: var(--s3); border: 1px solid var(--line); border-radius: var(--r-chip);
+    overflow-wrap: anywhere;
+  }
+  .ev p { margin-top: 4px; color: var(--fg-2); font-size: 12.5px; }
+  .tl-empty { color: var(--fg-3); font-size: 13px; padding: 24px 0; text-align: center; }
+
+  /* ---------- gavexA audit ---------- */
+  .audit-q { padding: 0 16px; color: var(--fg-2); font-size: 13px; }
+  .audit-q b { color: var(--fg); font-weight: 600; }
+  .rev-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 14px 16px 0; }
+  .rev { border: 1px solid var(--line); background: var(--s2); border-radius: var(--r-card); padding: 14px; display: grid; gap: 10px; align-content: start; transition: border-color .16s ease-out, opacity .16s; }
+  .rev.is-idle { opacity: .55; }
+  .rev.is-run { border-color: var(--violet-bd); }
+  .rev-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .rev-head .greek { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; border: 1px solid var(--violet-bd); background: var(--violet-bg); color: var(--violet-fg); font-weight: 700; }
+  .rev-head .name { font-weight: 600; font-size: 13px; }
+  .rev-head .trait { color: var(--fg-3); font-size: 12px; width: 100%; }
+  .rev .verdict { font-size: 13px; color: var(--fg); min-height: 40px; }
+  .rev .verdict.dim { color: var(--fg-3); }
+  .rev .conf { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; font-size: 12px; color: var(--fg-3); }
+  .rev .conf .bar { margin: 0; }
+  .rev .conf .bar i { background: var(--violet); }
+  .rev .foot { display: flex; gap: 6px; flex-wrap: wrap; }
+  .consensus { margin: 14px 16px 16px; padding: 12px 14px; border-radius: var(--r-card); border: 1px solid var(--line); background: var(--s2); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; color: var(--fg-2); }
+  .consensus.done { border-color: var(--violet-bd); background: var(--violet-bg); color: var(--fg); }
+  .consensus .arrow { color: var(--fg-3); }
+
+  /* ---------- C · swimlanes ---------- */
+  .lanes-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .lanes-bar h2 { font-size: 15px; font-weight: 600; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip {
+    height: 28px; padding: 0 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--s1);
+    color: var(--fg-2); font-size: 12px; font-weight: 500; white-space: nowrap;
+    transition: background-color .16s ease-out, border-color .16s ease-out, color .16s ease-out;
+  }
+  .chip:hover { border-color: var(--line-strong); color: var(--fg); }
+  .chip[aria-pressed="true"] { background: var(--fg); color: var(--btn-fg); border-color: var(--fg); }
+  .chip .mono { font-family: var(--mono); }
+  .lanes { display: grid; gap: 0; }
+  .lane { background: var(--s1); border: 1px solid var(--line); border-radius: var(--r-panel); transition: border-color .16s ease-out; }
+  .lane.is-active { border-color: var(--line-strong); }
+  .lane-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 14px 12px 10px; }
+  .lane-toggle {
+    display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 320px;
+    background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 4px 6px; text-align: start;
+  }
+  .lane-toggle:hover { background: var(--s3); }
+  .lane-toggle .chev { width: 16px; height: 16px; color: var(--fg-3); transition: transform .24s var(--ease); flex: none; }
+  .lane.collapsed .lane-toggle .chev { transform: rotate(-90deg); }
+  .lane-toggle .k { font: 600 11px/1 var(--mono); letter-spacing: .06em; color: var(--fg-3); flex: none; padding: 5px 7px; border: 1px solid var(--line); border-radius: var(--r-chip); background: var(--s2); }
+  .lane-toggle .ttl { font-size: 14.5px; font-weight: 600; letter-spacing: -.005em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lane-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; color: var(--fg-3); font-size: 12px; }
+  .lane-body { display: grid; grid-template-rows: 1fr; transition: grid-template-rows .24s var(--ease); }
+  .lane.collapsed .lane-body { grid-template-rows: 0fr; }
+  .lane-clip { min-height: 0; overflow: hidden; }
+  .lane-inner {
+    display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(340px, 1fr); gap: 14px;
+    margin: 0 14px 14px; padding: 14px; border-radius: 12px; background: var(--s2); border: 1px solid var(--line);
+  }
+  .lane-inner > div { display: flex; flex-direction: column; min-width: 0; }
+  .col-label { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .col-label .eyebrow { flex: none; }
+  .col-label .rule { flex: 1; height: 1px; background: var(--line); }
+  .workers { display: grid; grid-template-columns: repeat(auto-fit, minmax(228px, 1fr)); gap: 12px; }
+
+  .wcard {
+    display: flex; flex-direction: column; gap: 12px; padding: 14px; min-width: 0;
+    border-radius: var(--r-card); border: 1px solid var(--blue-bd); background: var(--blue-bg);
+    transition: border-color .2s ease-out, background-color .2s ease-out, opacity .2s;
+  }
+  .wcard.is-idle { border-color: var(--line); background: var(--s1); opacity: .62; }
+  .wcard.is-rework { border-color: var(--amber-bd); background: var(--amber-bg); }
+  .wcard .wh { display: grid; gap: 6px; }
+  .wcard .wname { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .wcard .wname b { font-size: 14px; font-weight: 600; }
+  .wcard .wname span { color: var(--fg-2); font-size: 12.5px; }
+  .sec-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11.5px; font-weight: 600; color: var(--fg-2); margin-bottom: 6px; }
+  .sec-label small { font: 500 11px/1 var(--mono); color: var(--fg-3); }
+  .scope ul { display: grid; gap: 4px; }
+  .scope li {
+    display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: var(--r-chip);
+    background: var(--s1); border: 1px solid var(--line); font: 11.5px/1.4 var(--mono); color: var(--fg); min-width: 0;
+  }
+  .scope li svg { width: 11px; height: 11px; flex: none; color: var(--fg-3); }
+  .scope li span { overflow-wrap: anywhere; }
+  .tasks { display: grid; gap: 6px; }
+  .tasks li { display: grid; grid-template-columns: 14px 1fr; gap: 8px; font-size: 12.5px; color: var(--fg-2); line-height: 1.45; }
+  .tasks li svg { width: 14px; height: 14px; margin-top: 2px; color: var(--fg-3); }
+  .wcard.is-done .tasks li svg, .wcard.is-fixed .tasks li svg { color: var(--blue); }
+  .wcard.is-done .tasks li, .wcard.is-fixed .tasks li { color: var(--fg); }
+  .wh > .pill, .rev > .pill { justify-self: start; }
+  .ws-matrix { margin-top: 12px; padding: 12px; border-radius: var(--r-card); border: 1px solid var(--line); background: var(--s1); display: grid; gap: 10px; }
+  .ws-matrix .sec-label { margin: 0; }
+  .ws-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 12px; color: var(--fg-2); }
+  .ws-row .k { color: var(--fg-3); min-width: 86px; }
+  .ws-row code { font-size: 11px; padding: 1px 5px; border-radius: 4px; background: var(--s3); border: 1px solid var(--line); }
+  .wcard .wf { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding-top: 2px; font-size: 11.5px; color: var(--fg-3); }
+
+  .vcard {
+    display: flex; flex-direction: column; gap: 12px; padding: 14px; flex: 1;
+    border-radius: var(--r-card); border: 1px solid var(--green-bd); background: var(--green-bg);
+    transition: border-color .2s ease-out, background-color .2s ease-out;
+  }
+  .vcard.is-idle { border-color: var(--line); background: var(--s1); }
+  .vcard.is-rework { border-color: var(--amber-bd); background: var(--amber-bg); }
+  .vcard .vh { display: grid; gap: 6px; }
+  .vcard .vname { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .vcard .vname b { font-size: 14px; font-weight: 600; }
+  .vcard .vname span { color: var(--fg-2); font-size: 12.5px; }
+  .vcard .vtags { display: flex; gap: 6px; flex-wrap: wrap; }
+  .gates { display: flex; gap: 6px; flex-wrap: wrap; }
+  .probes { display: grid; gap: 4px; }
+  .probe {
+    display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 8px; align-items: start;
+    padding: 6px 8px; border-radius: var(--r-chip); background: var(--s1); border: 1px solid var(--line); font-size: 12px;
+    transition: border-color .16s ease-out, background-color .16s ease-out;
+  }
+  .probe .ic { width: 14px; height: 14px; margin-top: 2px; }
+  .probe code { font-size: 11.5px; color: var(--fg); overflow-wrap: anywhere; }
+  .probe .res { font: 500 11px/1.5 var(--mono); color: var(--fg-3); text-align: end; white-space: nowrap; }
+  .probe .gate-tag { font: 600 10px/1 var(--mono); color: var(--fg-3); margin-left: 6px; }
+  .probe.is-ok .res { color: var(--green-fg); }
+  .probe.is-fail { border-color: var(--rose-bd); background: var(--rose-bg); }
+  .probe.is-fail .res { color: var(--rose-fg); white-space: normal; }
+  .probe.is-run { border-color: var(--blue-bd); }
+  .probe.is-idle { opacity: .6; }
+
+  .rework { border-radius: var(--r-card); border: 1px solid var(--amber-bd); background: var(--amber-bg); padding: 12px; display: grid; gap: 10px; }
+  .rework-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .rework-head b { font-size: 13px; font-weight: 600; }
+  .rework-head .btn { margin-left: auto; }
+  .rw-steps { position: relative; display: grid; gap: 10px; }
+  .rw-steps::before { content: ""; position: absolute; left: 7px; top: 8px; bottom: 8px; width: 1px; background: var(--amber-bd); }
+  .rw { position: relative; display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 10px; transition: opacity .2s; }
+  .rw.is-todo { opacity: .42; }
+  .rw .mk { width: 15px; height: 15px; border-radius: 50%; margin-top: 2px; background: var(--s1); border: 1px solid var(--line-strong); display: grid; place-items: center; position: relative; z-index: 1; }
+  .rw .mk .ic { width: 15px; height: 15px; }
+  .rw.is-done .mk { border-color: transparent; }
+  .rw.is-done .mk.rose { background: var(--rose); } .rw.is-done .mk.amber { background: var(--amber); }
+  .rw.is-done .mk.blue { background: var(--blue); } .rw.is-done .mk.green { background: var(--green); }
+  .rw.is-active .mk { border-color: transparent; background: var(--s1); }
+  .rw .rt { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12.5px; font-weight: 600; }
+  .rw p { margin-top: 3px; font-size: 12px; color: var(--fg-2); line-height: 1.5; }
+  .rw p code { font-size: 11px; padding: 1px 5px; border-radius: 4px; background: var(--s1); border: 1px solid var(--line); overflow-wrap: anywhere; }
+
+  .gate-link { display: flex; flex-direction: column; align-items: center; padding: 0; }
+  .gate-link .stem { width: 1px; height: 14px; background: var(--line-strong); }
+  .lanes-empty { padding: 40px; text-align: center; color: var(--fg-3); border: 1px dashed var(--line-strong); border-radius: var(--r-panel); }
+
+  footer.foot { color: var(--fg-3); font-size: 12px; padding: 8px 0 0; display: flex; gap: 12px; flex-wrap: wrap; justify-content: space-between; }
+  footer.foot a { color: var(--fg-2); }
+
+  [hidden] { display: none !important; }
+
+  /* ---------- responsive ---------- */
+  @media (max-width: 1279px) {
+    .lane-inner { grid-template-columns: minmax(0, 1.35fr) minmax(320px, 1fr); }
+  }
+  @media (max-width: 1099px) {
+    .grid-b { grid-template-columns: minmax(0, 1fr); }
+    .tl-wrap { height: 380px; }
+    .lane-inner { grid-template-columns: minmax(0, 1fr); }
+    .kpi-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    .kpi { grid-column: span 2; }
+    .kpi:nth-child(n+4) { grid-column: span 3; }
+    .rev-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 719px) {
+    .wrap { padding: 0 14px; }
+    .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .kpi, .kpi:nth-child(n+4) { grid-column: auto; }
+    .kpi:last-child { grid-column: 1 / -1; }
+    .kpi .val b { font-size: 24px; }
+    .actions { margin-left: 0; width: 100%; }
+    .run .crumb { display: none; }
+    .lane-inner { margin: 0 8px 8px; padding: 10px; }
+    .probe { grid-template-columns: 16px minmax(0, 1fr); }
+    .probe .res { grid-column: 2; text-align: start; white-space: normal; }
+    .panel-head .right { margin-left: 0; width: 100%; min-width: 0; }
+    .seg-scroll { overflow-x: auto; }
+    .seg button small { display: none; }
+    .seg button { padding: 0 9px; }
+    .lane-toggle { flex-basis: 100%; }
+    .lane-toggle .ttl { white-space: normal; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true">
+        <rect x=".5" y=".5" width="31" height="31" rx="8" fill="none" stroke="currentColor" stroke-opacity=".25"/>
+        <path d="M14 5l11 11M12 7l4-4M23 18l4-4M19 12 8 23M5 27h14" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div><b>GAVEX</b> <span>Guarded Execution</span></div>
+    </div>
+    <div class="run">
+      <span class="pill mono">openclaw-gateway</span>
+      <span class="crumb">会话调度事件驱动重构</span>
+      <span class="pill mono ghost">run · 20261101-1404</span>
+      <span id="livePill"></span>
+    </div>
+    <div class="actions">
+      <div class="seg" role="group" aria-label="回放速度" id="speedSeg">
+        <button type="button" data-speed="1" aria-pressed="true">1×</button>
+        <button type="button" data-speed="2" aria-pressed="false">2×</button>
+        <button type="button" data-speed="4" aria-pressed="false">4×</button>
+      </div>
+      <button type="button" class="btn primary" id="replayBtn"></button>
+      <button type="button" class="btn icon" id="themeBtn" aria-label="切换深浅色"></button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <!-- A · KPI -->
+    <section class="panel" aria-labelledby="kpiTitle">
+      <div class="panel-head">
+        <span class="eyebrow">A · Global KPI</span>
+        <h2 id="kpiTitle">全局 KPI 仪表盘</h2>
+        <span class="sub" id="kpiSub"></span>
+        <div class="right seg-scroll">
+          <div class="seg" role="group" aria-label="执行模式" id="modeSeg">
+            <button type="button" data-mode="gavexA" aria-pressed="false"><span class="mono">gavexA</span><small>对抗会审</small></button>
+            <button type="button" data-mode="gavexB" aria-pressed="false"><span class="mono">gavexB</span><small>阶梯施工</small></button>
+            <button type="button" data-mode="gavexAB" aria-pressed="true"><span class="mono">gavexAB</span><small>全套闭环</small></button>
+          </div>
+        </div>
+      </div>
+      <div class="kpi-grid" id="kpis"></div>
+    </section>
+
+    <!-- B · progress + watchdog -->
+    <section class="grid-b">
+      <div class="panel" aria-labelledby="progTitle">
+        <div class="panel-head">
+          <span class="eyebrow">B · Live</span>
+          <h2 id="progTitle">实时任务进度卡</h2>
+          <div class="right"><span class="pill xs" id="progNow"></span></div>
+        </div>
+        <div class="prog-top">
+          <div class="row"><span class="pct" id="progPct">0%</span><span class="meta" id="progMeta"></span></div>
+          <div class="bar blue"><i id="progBar"></i></div>
+        </div>
+        <ol class="plist" id="plist"></ol>
+      </div>
+      <div class="panel" aria-labelledby="tlTitle">
+        <div class="panel-head">
+          <span class="eyebrow">B · Watchdog</span>
+          <h2 id="tlTitle">事件驱动 Watchdog 时间线</h2>
+          <span class="sub num" id="tlCount"></span>
+          <div class="right">
+            <div class="seg" role="group" aria-label="事件筛选" id="tlSeg">
+              <button type="button" data-tl="all" aria-pressed="true">全部</button>
+              <button type="button" data-tl="dispatch" aria-pressed="false">派工</button>
+              <button type="button" data-tl="watchdog" aria-pressed="false">Watchdog</button>
+              <button type="button" data-tl="verify" aria-pressed="false">验工</button>
+            </div>
+          </div>
+        </div>
+        <div class="tl-wrap" id="tlWrap">
+          <ol class="tl" id="tl" aria-live="polite"></ol>
+        </div>
+      </div>
+    </section>
+
+    <!-- gavexA · audit -->
+    <section class="panel" id="auditPanel" aria-labelledby="auditTitle">
+      <div class="panel-head">
+        <span class="eyebrow">gavexA · 3+1</span>
+        <h2 id="auditTitle">异构对抗会审 · Adversarial Cross-Audit</h2>
+        <div class="right" id="auditState"></div>
+      </div>
+      <p class="audit-q"><b>会审议题：</b>Gateway 在 200 并发会话下偶发重复派工 —— 定位根因并给出可施工的重构方案。三席互不可见独立盲审，匿名互换后交叉质询，全部论点必须由真实环境探针闭合。</p>
+      <div class="rev-grid" id="revGrid"></div>
+      <div class="consensus" id="consensus"></div>
+    </section>
+
+    <!-- C · swimlanes -->
+    <section id="lanesSection" aria-labelledby="lanesTitle">
+      <div class="lanes-bar" style="margin-bottom:12px">
+        <span class="eyebrow">C · Stage Gate Swimlanes</span>
+        <h2 id="lanesTitle">双栏阶梯门禁泳道</h2>
+        <div class="chips" id="filterChips" role="group" aria-label="步骤筛选"></div>
+        <div style="margin-left:auto;display:flex;gap:6px">
+          <button type="button" class="btn sm" id="expandAll">全部展开</button>
+          <button type="button" class="btn sm" id="collapseAll">全部折叠</button>
+        </div>
+      </div>
+      <div class="lanes" id="lanes"></div>
+    </section>
+
+    <footer class="foot">
+      <span>GAVEX · Guarded Audit &amp; Verifier-gated Execution — 演示数据，可替换为 <code>.gavex/ledger.md</code> 解析结果。成功：<code>GAVEX_FINAL_ACCEPTED</code>；熔断升级：<code>GAVEX_ESCALATED</code>（人工介入，非成功）。</span>
+      <span>GAVEX Protocol v2.0 · Guarded Audit &amp; Verifier-gated Execution</span>
+    </footer>
+  </div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ================= data ================= */
+  var M = {
+    sol: 'openai/gpt-6.1-sol · max',
+    opus: 'anthropic/claude-opus-5-5 · max',
+    argon: 'google/gemini-4-argon · high'
+  };
+
+  var STEPS = [
+    {
+      k: 1, title: '底座 · 配置 Schema / 持久化迁移 / 共享类型', short: '底座：Schema · 迁移 · 类型',
+      workers: [
+        { x: 'A', role: '配置 Schema', model: M.sol, saves: 4, mins: 9,
+          scope: ['src/config/schema.ts', 'src/config/defaults.ts'],
+          tasks: ['新增 scheduler.mode 枚举与默认值', 'watchdog.patrolInterval 增加 1m–30m 范围校验', '导出 JSON Schema 供 CLI 校验'] },
+        { x: 'B', role: '持久化迁移', model: M.opus, saves: 5, mins: 12,
+          scope: ['migrations/0042_session_events.sql', 'src/storage/sessionStore.ts'],
+          tasks: ['新增 session_events 追加写事件表', 'sessionStore 改为事件 + 快照双写', '迁移脚本支持 --dry-run 预演'] },
+        { x: 'C', role: '共享类型', model: M.argon, saves: 3, mins: 7,
+          scope: ['packages/types/src/session.ts', 'packages/types/src/events.ts'],
+          tasks: ['定义 SessionEvent 判别联合类型', '收紧 RunState 状态机类型', '导出 v2 公共类型并标注 deprecated'] }
+      ],
+      verifier: {
+        model: M.opus,
+        probes: [
+          { cmd: 'pnpm -F config test', ok: '12 passed', g: 'G1' },
+          { cmd: 'node scripts/migrate.js --dry-run', ok: '0 destructive DDL', fail: 'DROP COLUMN legacy_state', g: 'G3' },
+          { cmd: 'pnpm -F types typecheck', ok: '0 errors', g: 'G1' },
+          { cmd: 'openclaw config validate fixtures/*.json', ok: '9/9 valid', g: 'G1' },
+          { cmd: 'sqlite3 .dump 前后快照 diff', ok: '0 rows lost', g: 'G3' },
+          { cmd: 'git diff --name-only ⊆ Write-Scope', ok: '6/6 in scope', g: 'WS' },
+          { cmd: '需求条目 ↔ 证据映射', ok: '9/9 covered', g: 'G4' }
+        ],
+        defect: { p: 1, w: 'B',
+          found: '迁移干跑输出包含 DROP COLUMN legacy_state，存量会话数据将被删除。',
+          fix: '改为 ADD COLUMN + 回填脚本；legacy_state 清理延后到 Step 6 独立迁移。',
+          recheck: '7/7 探针全绿，前序回归 0，sqlite 快照 0 行丢失。' }
+      },
+      patrol: [{ type: 'PATROL', tool: 'watchdog.patrol(every=5m)', msg: '3/3 Worker 均有新落盘（mtime 更新），只看不打断', adv: 300 }]
+    },
+    {
+      k: 2, title: '会话调度核心 · 事件总线 / 调度器', short: '调度核心：EventBus · Scheduler',
+      workers: [
+        { x: 'A', role: '事件总线', model: M.argon, saves: 4, mins: 11,
+          scope: ['src/runtime/eventBus.ts', 'src/runtime/eventBus.test.ts'],
+          tasks: ['实现带背压的 typed EventBus', 'completion 事件携带幂等键 runId+seq', '补齐 18 条单测与竞态用例'] },
+        { x: 'B', role: '调度器', model: M.sol, saves: 6, mins: 14,
+          scope: ['src/runtime/scheduler.ts', 'src/runtime/queue.ts'],
+          tasks: ['tick 轮询改为事件驱动唤醒', '重试队列按幂等键去重', 'per-session 并发上限可配置'] }
+      ],
+      verifier: {
+        model: M.argon,
+        probes: [
+          { cmd: 'pnpm test runtime', ok: '41 passed', g: 'G1' },
+          { cmd: 'node bench/dispatch.js --sessions=200', ok: '0 duplicate dispatch', fail: '3 duplicate / 200', g: 'G1' },
+          { cmd: 'curl -sN :8080/api/sessions/s-17/events', ok: 'SSE · seq 连续', g: 'G1' },
+          { cmd: 'kill -TERM 后冷启动恢复队列', ok: 'restored 100%', g: 'G3' },
+          { cmd: 'p95 dispatch latency', ok: '38ms ≤ 50ms', g: 'G4' },
+          { cmd: 'git diff --name-only ⊆ Write-Scope', ok: '4/4 in scope', g: 'WS' },
+          { cmd: '需求条目 ↔ 证据映射', ok: '8/8 covered', g: 'G4' }
+        ],
+        defect: { p: 1, w: 'B',
+          found: '200 会话真实压测出现 3 次重复派工：重试路径绕过了幂等键去重。',
+          fix: '重试入队前查询 seenKeys LRU；补 2 条竞态回归测试。',
+          recheck: '7/7 探针全绿，压测 0 重复派工，Step 1 回归通过。' }
+      },
+      patrol: []
+    },
+    {
+      k: 3, title: '工具沙箱与审批 · 执行器 / 审批流 / 审计日志', short: '沙箱 · 审批 · 审计',
+      workers: [
+        { x: 'A', role: '沙箱执行器', model: M.opus, saves: 5, mins: 13,
+          scope: ['src/tools/sandbox/**'],
+          tasks: ['exec 默认进入只读沙箱', '超时与输出截断统一 64 KB', '沙箱逃逸用例 12 条'] },
+        { x: 'B', role: '审批流', model: M.argon, saves: 4, mins: 10,
+          scope: ['src/approvals/**'],
+          tasks: ['allow-once 仅覆盖精确命令', '审批预览展示完整多行脚本', '审批 10 分钟过期自动失效'] },
+        { x: 'C', role: '审计日志', model: M.sol, saves: 3, mins: 8,
+          scope: ['src/audit/logger.ts', 'src/audit/redact.ts'],
+          tasks: ['工具调用写结构化审计日志', '密钥模式脱敏', '日志 7 天轮转'] }
+      ],
+      verifier: {
+        model: M.sol,
+        probes: [
+          { cmd: 'pnpm test tools approvals audit', ok: '96 passed', g: 'G1' },
+          { cmd: 'openclaw exec "rm -rf /tmp/gavex-x"', ok: '弹出完整审批预览', g: 'G1' },
+          { cmd: 'allow-once 后重复执行同一命令', ok: '再次请求审批', fail: '未再次请求审批', g: 'G1' },
+          { cmd: 'rg "sk-[A-Za-z0-9]{20}" logs/', ok: '0 明文密钥', g: 'G3' },
+          { cmd: 'sandbox escape suite', ok: '12/12 blocked', g: 'G1' },
+          { cmd: 'git diff --name-only ⊆ Write-Scope', ok: '11/11 in scope', g: 'WS' },
+          { cmd: '需求条目 ↔ 证据映射', ok: '10/10 covered', g: 'G4' }
+        ],
+        defect: { p: 2, w: 'B',
+          found: '真实 CLI 入口复现：allow-once 被缓存为 allow-always，同一命令第二次执行未再请求审批。',
+          fix: '审批 token 绑定 commandHash 并加单次消费标记；补真实入口回归用例。',
+          recheck: '7/7 探针全绿，Step 1–2 回归通过。' }
+      },
+      patrol: [{ type: 'PATROL', tool: 'watchdog.patrol(every=5m)', msg: '3/3 Worker 正常落盘；未发现 Write-Scope 越界写入', adv: 300 }]
+    },
+    {
+      k: 4, title: 'Watchdog · 低频巡检 / Steer 收拢通道', short: 'Watchdog：巡检 · Steer',
+      workers: [
+        { x: 'A', role: '巡检器', model: M.sol, saves: 4, mins: 12,
+          scope: ['src/watchdog/patrol.ts', 'src/watchdog/stall.ts'],
+          tasks: ['5 分钟低频巡检定时器', '连续 2 次无落盘判定停滞', '越界写入检测（mtime 快照）'] },
+        { x: 'B', role: 'Steer 通道', model: M.opus, saves: 3, mins: 16,
+          scope: ['src/watchdog/steer.ts', 'src/runtime/inbox.ts'],
+          tasks: ['steer 消息注入子代理收件箱', '「收拢交卷」标准模板', 'steer 次数上限与升级'] }
+      ],
+      verifier: {
+        model: M.opus,
+        probes: [
+          { cmd: 'pnpm test watchdog', ok: '27 passed', g: 'G1' },
+          { cmd: '真实启动 2 个假死 Worker', ok: '各收到 1 次 steer', g: 'G1' },
+          { cmd: '模拟越界写 src/config/**', ok: '拦截 + 记账', g: 'G1' },
+          { cmd: '空闲 CPU 采样 10 min', ok: '0.3% · 无忙轮询', fail: '4.8% · 1s 忙轮询', g: 'G4' },
+          { cmd: 'ledger 追加写一致性', ok: '0 lost lines', g: 'G3' },
+          { cmd: 'git diff --name-only ⊆ Write-Scope', ok: '4/4 in scope', g: 'WS' },
+          { cmd: '需求条目 ↔ 证据映射', ok: '7/7 covered', g: 'G4' }
+        ],
+        defect: { p: 3, w: 'A',
+          found: '需求要求「零忙轮询」，实测 patrol 内部仍有 1s setInterval，空闲 CPU 4.8%。',
+          fix: '改为文件 mtime 事件 + 5 分钟单次 timer，空闲 CPU 降至 0.3%。',
+          recheck: '7/7 探针全绿，Step 1–3 回归通过。' }
+      },
+      patrol: [
+        { type: 'PATROL', tool: 'watchdog.patrol(every=5m)', msg: 'Worker 4-B 连续 2 次巡检无新落盘（10 min）→ 判定停滞', adv: 600 },
+        { type: 'STEER', tool: 'steer(r-4b, "停止扩张范围，提交已落盘成果与阻塞证据")', msg: 'Watchdog Steer：收拢交卷', adv: 20 }
+      ]
+    },
+    {
+      k: 5, title: 'Dashboard 面板 · 看板 UI / 数据接口', short: 'Dashboard：UI · API',
+      workers: [
+        { x: 'A', role: '看板 UI', model: M.argon, saves: 7, mins: 18,
+          scope: ['ui/dashboard/index.html', 'ui/dashboard/tokens.css'],
+          tasks: ['KPI / 进度卡 / 泳道三大组件', '深浅色切换与步骤筛选', '模拟打回重修动效'] },
+        { x: 'B', role: '数据接口', model: M.sol, saves: 4, mins: 11,
+          scope: ['src/http/routes/gavex.ts', 'src/gavex/ledgerParser.ts'],
+          tasks: ['GET /api/gavex/runs/:id', '台账 Markdown → JSON 解析', 'SSE 推送事件与断线续传'] }
+      ],
+      verifier: {
+        model: M.opus,
+        probes: [
+          { cmd: 'curl -sf :8080/api/gavex/runs/demo | jq', ok: '200 · schema ok', g: 'G1' },
+          { cmd: 'headless 390/1024/1440 × dark/light', ok: '6/6 无溢出', fail: '390px 浅色胶囊溢出 14px', g: 'G2' },
+          { cmd: 'console.error 计数', ok: '0', g: 'G2' },
+          { cmd: 'stylelint --rule no-side-accent-bar', ok: '0 hits', g: 'G2' },
+          { cmd: 'SSE 断线重连', ok: 'resume from seq', g: 'G1' },
+          { cmd: 'git diff --name-only ⊆ Write-Scope', ok: '4/4 in scope', g: 'WS' },
+          { cmd: '需求条目 ↔ 证据映射', ok: '11/11 covered', g: 'G4' }
+        ],
+        defect: { p: 1, w: 'A',
+          found: '390px 视口 + 浅色主题下，模型胶囊溢出 Worker 卡片 14px。',
+          fix: '模型胶囊允许换行并限制 max-width:100%，补 6 张多视口截图。',
+          recheck: '7/7 探针全绿，6/6 截图无溢出，console.error = 0。' }
+      },
+      patrol: [{ type: 'PATROL', tool: 'watchdog.patrol(every=5m)', msg: '2/2 Worker 正常落盘，只看不打断', adv: 300 }]
+    },
+    {
+      k: 6, title: '文档 · 发布 · 全量回归套件', short: '文档 · 发布 · 回归',
+      workers: [
+        { x: 'A', role: '文档与官网', model: M.opus, saves: 5, mins: 15,
+          scope: ['README.md', 'docs/**'],
+          tasks: ['README 架构图与对比表', 'GitHub Pages 官网', '6 平台安装指南'] },
+        { x: 'B', role: '回归与发布', model: M.argon, saves: 4, mins: 12,
+          scope: ['scripts/release.sh', '.github/workflows/ci.yml', 'migrations/0043_drop_legacy.sql'],
+          tasks: ['全量回归套件 42 探针', 'legacy_state 安全清理迁移', 'CI 矩阵 node 22 / 24 / 26'] }
+      ],
+      verifier: {
+        model: M.sol,
+        probes: [
+          { cmd: 'pnpm -r test', ok: '312 passed', g: 'G1' },
+          { cmd: 'bash scripts/release.sh --dry-run', ok: 'no publish · tag ok', g: 'G3' },
+          { cmd: 'markdown-link-check README.md docs/', ok: '0 dead links', fail: '2 dead links', g: 'G4' },
+          { cmd: 'migrate 0043 --dry-run', ok: '仅清理已回填列', g: 'G3' },
+          { cmd: 'CI matrix node 22/24/26', ok: '3/3 green', g: 'G1' },
+          { cmd: 'git diff --name-only ⊆ Write-Scope', ok: '7/7 in scope', g: 'WS' },
+          { cmd: '需求条目 ↔ 证据映射', ok: '9/9 covered', g: 'G4' }
+        ],
+        defect: { p: 2, w: 'A',
+          found: 'README 与官网存在 2 个失效链接：Hermes 安装锚点缺失、Dashboard 相对路径错误。',
+          fix: '补齐安装锚点并修正相对路径，增加链接检查到 CI。',
+          recheck: '7/7 探针全绿，Step 1–5 全量回归通过。' }
+      },
+      patrol: [{ type: 'PATROL', tool: 'watchdog.patrol(every=5m)', msg: '2/2 Worker 正常落盘，只看不打断', adv: 300 }]
+    }
+  ];
+
+  var REVIEWERS = [
+    { id: 'α', model: M.sol, trait: '演绎推理 · 代码路径追踪', probes: 6, conf: 0.86,
+      verdict: '调度 tick 与 completion 事件竞态，导致同一 runId 被二次入队。', stance: ['blue', '提出主假设'] },
+    { id: 'β', model: M.opus, trait: '反例构造 · 边界条件', probes: 7, conf: 0.91,
+      verdict: '支持竞态假设；补充：重试队列缺少幂等键，放大了重复派工。', stance: ['green', '支持 + 补充'] },
+    { id: 'γ', model: M.argon, trait: '系统视角 · 运行时观测', probes: 5, conf: 0.88,
+      verdict: '初判锁超时；β 的反例探针证伪后改判，同意「事件驱动 + 幂等键」。', stance: ['amber', '反驳 → 收敛'] }
+  ];
+
+  var GATES = [
+    { id: 'G1', name: '真实入口' }, { id: 'G2', name: '多视口渲染' },
+    { id: 'G3', name: 'Dry-run 零破坏' }, { id: 'G4', name: '需求不缩水' }, { id: 'WS', name: 'Write-Scope' }
+  ];
+
+  /* ================= icons ================= */
+  var I = {
+    check: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8" fill="var(--green)"/><path d="M4.7 8.2l2.1 2.1 4.5-4.6" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    checkV: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8" fill="var(--violet)"/><path d="M4.7 8.2l2.1 2.1 4.5-4.6" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    cross: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8" fill="var(--rose)"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>',
+    lock: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7.25" fill="none" stroke="var(--line-strong)" stroke-width="1.5"/><rect x="5.4" y="7.4" width="5.2" height="3.8" rx="1" fill="none" stroke="var(--fg-3)" stroke-width="1.2"/><path d="M6.5 7.4V6.3a1.5 1.5 0 0 1 3 0v1.1" fill="none" stroke="var(--fg-3)" stroke-width="1.2"/></svg>',
+    idle: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="var(--line-strong)" stroke-width="1.5"/></svg>',
+    lockS: '<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2.5" y="5.2" width="7" height="5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M4 5.2V3.9a2 2 0 0 1 4 0v1.3" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>',
+    tick: '<svg viewBox="0 0 14 14" aria-hidden="true"><path d="M3 7.3l2.6 2.6L11 4.3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    chev: '<svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    sun: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+    moon: '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.2 10.1A5.6 5.6 0 0 1 5.9 2.8a5.6 5.6 0 1 0 7.3 7.3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>',
+    play: '<svg class="ic sm" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5v9l7-4.5z" fill="currentColor"/></svg>',
+    stop: '<svg class="ic sm" viewBox="0 0 16 16" aria-hidden="true"><rect x="4" y="4" width="8" height="8" rx="1.5" fill="currentColor"/></svg>'
+  };
+  function spin(c) {
+    return '<svg class="ic spin ' + c + '" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-opacity=".22" stroke-width="1.5"/><path d="M8 1.75a6.25 6.25 0 0 1 6.25 6.25" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  }
+
+  /* ================= helpers ================= */
+  function $(s, r) { return (r || document).querySelector(s); }
+  function $$(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function setHTML(el, html) { if (el && el.__h !== html) { el.__h = html; el.innerHTML = html; } }
+  function setClass(el, cls) { if (el && el.className !== cls) el.className = cls; }
+  var BASE = 14 * 3600 + 4 * 60;
+  function clock(t) {
+    var s = (BASE + t) % 86400, h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60;
+    return [h, m, x].map(function (n) { return n < 10 ? '0' + n : '' + n; }).join(':');
+  }
+  function dur(t) { var h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60; return h ? h + 'h ' + m + 'm' : m + 'm'; }
+  var prefersReduced = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var params = new URLSearchParams(location.search);
+
+  /* ================= state ================= */
+  var S = {
+    mode: ['gavexA', 'gavexB', 'gavexAB'].indexOf(params.get('mode')) >= 0 ? params.get('mode') : 'gavexAB',
+    speed: 1, filter: 'all', tl: 'all',
+    playing: false, sim: null, instant: false,
+    audit: 0, plan: 'locked', planFresh: false, final: 'locked', finalFresh: false,
+    steps: [], events: [], clock: 0, collapsed: {}
+  };
+  function hasA() { return S.mode !== 'gavexB'; }
+  function hasB() { return S.mode !== 'gavexA'; }
+  function freshStep(d) {
+    var w = {};
+    d.workers.forEach(function (x) { w[x.x] = 'idle'; });
+    return { status: 'locked', probes: d.verifier.probes.map(function () { return 'idle'; }), workers: w, rw: 0, rwAct: -1, round: 0, reworks: 0, fresh: false };
+  }
+  function reset() {
+    S.audit = 0; S.plan = 'locked'; S.final = 'locked'; S.planFresh = S.finalFresh = false;
+    S.steps = STEPS.map(freshStep); S.events = []; S.clock = 0; S.sim = null;
+  }
+
+  /* ================= engine ================= */
+  var token = 0;
+  function Cancel() {}
+  function sleep(ms) {
+    if (S.instant) return Promise.resolve();
+    var t = token;
+    return new Promise(function (res, rej) {
+      setTimeout(function () { if (t === token) res(); else rej(new Cancel()); }, ms / S.speed);
+    });
+  }
+  function emit(type, tool, msg, adv, k) {
+    S.clock += adv || 15;
+    var e = { t: S.clock, type: type, tool: tool, msg: msg, k: k };
+    S.events.push(e);
+    if (!S.instant) { pushEvent(e); }
+  }
+  function ui() { if (!S.instant) render(false); }
+
+  function runAudit() {
+    S.audit = 1; ui();
+    emit('AUDIT', 'sessions_spawn × 3 → α β γ (blind, isolated ctx)', '派出 3 席异构盲审：GPT · Claude · Gemini 互不可见', 60);
+    return sleep(1100).then(function () {
+      S.audit = 2; ui();
+      emit('AUDIT', 'arbiter.swap(anonymous=true)', '三份结论匿名互换，进入交叉质询', 420);
+      return sleep(900);
+    }).then(function () {
+      S.audit = 3; ui();
+      emit('VERIFY', 'probe × 18 (real env)', '全部论点交由真实环境探针闭合：γ 的锁超时假设被反例证伪', 540);
+      return sleep(900);
+    }).then(function () {
+      S.audit = 4; ui();
+      return sleep(500);
+    }).then(function () {
+      S.audit = 5; ui();
+      emit('PASS', 'UNCONDITIONAL_CONSENSUS', '18/18 探针闭合 · 2 轮动态收敛 → 方案输入 gavexB Step 0', 120);
+      return sleep(500);
+    });
+  }
+
+  function runPlan() {
+    S.plan = 'run'; ui();
+    emit('PLAN', 'gavex.plan(steps=6, workers=14, probes=42)', 'Main-Agent 依赖分析：拆解 Step 1 → Step 6，底座先行', 30);
+    return sleep(900).then(function () {
+      emit('PLAN', 'writeScope.check(matrix=14)', '14 份 Write-Scope 两两求交：冲突 0 · 热点文件唯一归属', 90);
+      S.plan = 'pass'; S.planFresh = true; ui();
+      return sleep(450);
+    });
+  }
+
+  function runStep(i) {
+    var d = STEPS[i], st = S.steps[i], k = d.k;
+    var ids = d.workers.map(function (w) { return 'r-' + k + w.x.toLowerCase(); });
+    var names = d.workers.map(function (w) { return k + '-' + w.x; }).join(' / ');
+    st.status = 'build';
+    d.workers.forEach(function (w) { st.workers[w.x] = 'run'; });
+    st.probes = st.probes.map(function () { return 'idle'; }); st.rw = 0; st.rwAct = -1;
+    ui();
+    emit('SPAWN', 'sessions_spawn × ' + d.workers.length + ' → ' + ids.join(' '), '并行派工 Worker ' + names + '，Write-Scope 两两互斥', 40, k);
+    var p = sleep(350).then(function () {
+      emit('WAIT', 'agents_wait(ids=[' + ids.join(', ') + '], awaitResults=true)', '事件驱动挂起，零忙轮询', 5, k);
+    });
+    d.patrol.forEach(function (ev) {
+      p = p.then(function () { return sleep(550); }).then(function () { emit(ev.type, ev.tool, ev.msg, ev.adv, k); });
+    });
+    var order = d.workers.slice().sort(function (a, b) { return a.mins - b.mins; });
+    var prev = 0;
+    order.forEach(function (w) {
+      p = p.then(function () { return sleep(420); }).then(function () {
+        st.workers[w.x] = 'done'; S.clock += Math.max(0, (w.mins - prev) * 60); prev = Math.max(prev, w.mins); ui();
+      });
+    });
+    return p.then(function () {
+      var saves = d.workers.reduce(function (a, w) { return a + w.saves; }, 0);
+      emit('SUBMIT', ids.length + '/' + ids.length + ' completed', '全员交卷 · 增量落盘 ' + saves + ' 次 · 自评不计入验收', 20, k);
+      return verifyStep(i);
+    });
+  }
+
+  function verifyStep(i) {
+    var d = STEPS[i], st = S.steps[i], k = d.k, v = d.verifier, df = v.defect, wx = df.w;
+    st.status = 'verify'; st.rw = 0; st.rwAct = -1; st.round = 0;
+    st.probes = st.probes.map(function () { return 'idle'; });
+    d.workers.forEach(function (w) { if (st.workers[w.x] === 'idle' || st.workers[w.x] === 'fixed') st.workers[w.x] = 'done'; });
+    ui();
+    emit('VERIFY', 'sessions_spawn(Verifier ' + k + ', readonly, fresh ctx)', '唤醒专职独立审验员：' + v.probes.length + ' 项探针 + G1–G4 一票否决', 30, k);
+    var p = sleep(380);
+    v.probes.forEach(function (_, j) {
+      p = p.then(function () { st.probes[j] = 'run'; ui(); return sleep(230); })
+           .then(function () { st.probes[j] = j === df.p ? 'fail' : 'ok'; S.clock += 25; ui(); });
+    });
+    return p.then(function () {
+      st.status = 'rework'; st.rw = 1; st.rwAct = 1; st.reworks += 1; ui();
+      return sleep(450);
+    }).then(function () {
+      emit('REJECT', 'STEP_' + k + '_REJECTED → Worker ' + k + '-' + wx, df.found, 20, k);
+      st.rw = 2; st.rwAct = 2; st.round = 1; st.workers[wx] = 'rework'; ui();
+      emit('SPAWN', 'sessions_spawn(Worker ' + k + '-' + wx + ', round=1)', '定点打回重修，Write-Scope 不变，只派给缺陷归属者', 15, k);
+      return sleep(1300);
+    }).then(function () {
+      st.workers[wx] = 'fixed'; st.rw = 3; st.rwAct = 3; st.status = 'recheck';
+      st.probes = st.probes.map(function () { return 'idle'; });
+      S.clock += 6 * 60; ui();
+      emit('VERIFY', "sessions_spawn(Verifier " + k + "′, fresh ctx)", '全新上下文全量复核：' + v.probes.length + ' 项探针 + 前序回归（不只验被修的那一条）', 20, k);
+      var q = sleep(300);
+      v.probes.forEach(function (_, j) {
+        q = q.then(function () { st.probes[j] = 'run'; ui(); return sleep(130); })
+             .then(function () { st.probes[j] = 'ok'; S.clock += 15; ui(); });
+      });
+      return q;
+    }).then(function () {
+      st.status = 'pass'; st.rw = 4; st.rwAct = -1; st.fresh = true; ui();
+      emit('PASS', 'STEP_' + k + '_VERIFIED_PASS', v.probes.length + '/' + v.probes.length + ' 全绿 · ' + (k < STEPS.length ? '解锁 Step ' + (k + 1) : '移交 Final 总验收'), 20, k);
+      return sleep(500);
+    });
+  }
+
+  function runFinal() {
+    S.final = 'run'; ui();
+    emit('VERIFY', 'gavex.final(probes=42, entry=real)', 'Main-Agent 独立总验收：真实入口全链路 + 42 项全量回归', 60);
+    return sleep(1100).then(function () {
+      S.final = 'pass'; S.finalFresh = true; ui();
+      emit('PASS', 'GAVEX_FINAL_ACCEPTED', '42/42 全量守门核验闭合 · 报告 49.8 KB 落盘', 120);
+    });
+  }
+
+  function pipeline() {
+    var p = Promise.resolve();
+    if (hasA()) p = p.then(runAudit);
+    if (hasB()) {
+      p = p.then(runPlan);
+      STEPS.forEach(function (_, i) { p = p.then(function () { return runStep(i); }); });
+      p = p.then(runFinal);
+    }
+    return p;
+  }
+
+  function play() {
+    token++; S.instant = false; S.playing = true; reset(); render(true);
+    var my = token;
+    pipeline().then(function () {
+      if (my !== token) return;
+      S.playing = false; render(false);
+    }, function (e) { if (!(e instanceof Cancel)) throw e; });
+  }
+  function jumpToEnd() {
+    token++; S.playing = false; S.instant = true; reset();
+    return pipeline().then(function () {
+      S.instant = false;
+      S.planFresh = S.finalFresh = false;
+      S.steps.forEach(function (s) { s.fresh = false; });
+      render(true);
+    });
+  }
+  function simulate(i) {
+    if (S.playing || S.sim !== null) return;
+    token++; var my = token; S.sim = i; S.collapsed[i] = false;
+    verifyStep(i).then(function () {
+      if (my === token) { S.sim = null; render(false); }
+    }, function (e) { if (!(e instanceof Cancel)) throw e; });
+  }
+
+  /* ================= render: KPI ================= */
+  function progressFrac() {
+    var done = 0, total = 0;
+    if (hasA()) { total += 1; done += Math.min(S.audit, 5) / 5; }
+    if (hasB()) {
+      total += STEPS.length + 2;
+      done += S.plan === 'pass' ? 1 : S.plan === 'run' ? .5 : 0;
+      S.steps.forEach(function (st) {
+        if (st.status === 'pass') done += 1;
+        else if (st.status !== 'locked') {
+          var ok = st.probes.filter(function (x) { return x === 'ok'; }).length / st.probes.length;
+          done += .25 + .5 * ok;
+        }
+      });
+      done += S.final === 'pass' ? 1 : S.final === 'run' ? .5 : 0;
+    }
+    return total ? Math.min(1, done / total) : 0;
+  }
+  function kpiData() {
+    var frac = progressFrac();
+    if (S.mode === 'gavexA') {
+      var closedA = S.audit >= 5 ? 18 : S.audit >= 3 ? 12 : S.audit >= 1 ? 4 : 0;
+      return [
+        { label: '盲审席 Reviewers', val: 3, unit: '席', note: 'GPT · Claude · Gemini 异构' },
+        { label: '收敛轮次 Rounds', val: S.audit >= 3 ? 2 : S.audit ? 1 : 0, unit: '轮', note: '动态收敛 · 不硬凑轮数' },
+        { label: '仲裁 Arbiter', val: 1, unit: '名', note: 'Main-Agent 兼任' },
+        { label: '实证探针 Probes', val: 18, unit: '项', note: closedA + '/18 闭合', bar: closedA / 18, badge: closedA === 18 ? '100% 闭合' : null },
+        { label: '会审报告 Report', val: 21.4 * frac, dec: 1, unit: 'KB', note: S.audit >= 5 ? '<span class="pill xs violet mono">UNCONDITIONAL_CONSENSUS</span>' : '收敛中…' }
+      ];
+    }
+    var pass = 0, closed = 0, run = 0, rw = 0;
+    S.steps.forEach(function (st) {
+      if (st.status === 'pass') { pass++; closed += st.probes.filter(function (x) { return x === 'ok'; }).length; }
+      Object.keys(st.workers).forEach(function (x) {
+        if (st.workers[x] === 'run') run++;
+        if (st.workers[x] === 'rework') rw++;
+      });
+    });
+    var ab = S.mode === 'gavexAB';
+    return [
+      { label: '阶梯 Steps', val: 6, unit: '步', note: 'Step 1 ~ 6 · 已解锁 ' + pass + '/6' },
+      { label: '并行施工 Workers', val: 14, unit: '名', note: run || rw ? '施工中 ' + run + ' · 重修 ' + rw : '非重叠 Write-Scope' + (ab ? ' · +3 会审席' : '') },
+      { label: '专职独立审验 Verifiers', val: 6, unit: '名', note: '已签发 PASS ' + pass + '/6' },
+      { label: '全量守门核验 Probes', val: 42, unit: '项', note: '<span class="num">' + closed + '/42</span>' + (ab ? ' · +18 会审探针' : ''), bar: closed / 42, badge: closed === 42 ? '100% 闭合' : null },
+      { label: '报告体量 Report', val: 49.8 * frac, dec: 1, unit: 'KB', note: ab ? 'ledger + 证据表 + 会审附录' : 'ledger + 逐阶证据表' }
+    ];
+  }
+  var kpiMode = null;
+  function fmtNum(v, dec) { return dec ? v.toFixed(dec) : String(Math.round(v)); }
+  function renderKPI(animate) {
+    var data = kpiData(), grid = $('#kpis');
+    if (kpiMode !== S.mode) {
+      animate = animate && kpiMode !== null;
+      kpiMode = S.mode;
+      grid.innerHTML = data.map(function (d, i) {
+        return '<div class="kpi"><div class="label">' + esc(d.label) + '</div>' +
+          '<div class="val"><b id="kv' + i + '">0</b><span>' + esc(d.unit) + '</span></div>' +
+          '<div class="note" id="kn' + i + '"></div>' +
+          (d.bar !== undefined ? '<div class="bar"><i id="kb' + i + '"></i></div>' : '') + '</div>';
+      }).join('');
+    }
+    data.forEach(function (d, i) {
+      var el = $('#kv' + i), to = d.val;
+      if (animate && !prefersReduced) {
+        var from = 0, t0 = performance.now();
+        (function step(now) {
+          var x = Math.min(1, (now - t0) / 400), e = 1 - Math.pow(1 - x, 3);
+          el.textContent = fmtNum(from + (to - from) * e, d.dec);
+          if (x < 1) requestAnimationFrame(step);
+        })(t0);
+      } else { el.textContent = fmtNum(to, d.dec); }
+      setHTML($('#kn' + i), d.note + (d.badge ? ' <span class="pill xs green"><span class="dot"></span>' + d.badge + '</span>' : ''));
+      var b = $('#kb' + i); if (b) b.style.width = (d.bar * 100).toFixed(1) + '%';
+    });
+    $('#kpiSub').textContent = S.mode === 'gavexA' ? '3+1 异构对抗会审' : S.mode === 'gavexB' ? 'Step 1 → 6 阶梯门禁施工' : 'gavexA 会审定方案 → gavexB 阶梯施工 → 总验收';
+  }
+
+  /* ================= render: progress ================= */
+  var STAT = {
+    locked: { cls: 'is-locked', icon: function () { return I.lock; }, pill: '<span class="pill xs">🔒 待解锁</span>' },
+    run: { cls: 'is-run', icon: function () { return spin('c-blue'); }, pill: '<span class="pill xs blue">进行中</span>' },
+    build: { cls: 'is-run', icon: function () { return spin('c-blue'); }, pill: '<span class="pill xs blue">并行施工中</span>' },
+    verify: { cls: 'is-verify', icon: function () { return spin('c-green'); }, pill: '<span class="pill xs green">独立验工中</span>' },
+    rework: { cls: 'is-rework', icon: function () { return spin('c-amber'); }, pill: '<span class="pill xs amber">打回重修</span>' },
+    recheck: { cls: 'is-verify', icon: function () { return spin('c-green'); }, pill: '<span class="pill xs green">二次复核中</span>' }
+  };
+  function rowHTML(st, tag, title, sub, stampText, fresh, violet) {
+    var s = st === 'pass' ? null : STAT[st];
+    var icon = st === 'pass' ? (violet ? I.checkV : I.check) : s.icon();
+    var right = st === 'pass' ? '<span class="stamp' + (violet ? ' violet' : '') + (fresh ? ' fresh' : '') + '">' + esc(stampText) + '</span>' : s.pill;
+    return { cls: 'prow ' + (st === 'pass' ? 'is-pass' : s.cls),
+      html: icon + '<div style="min-width:0"><div class="pname"><span class="tag">' + esc(tag) + '</span><span class="t">' + esc(title) + '</span></div><div class="psub">' + esc(sub) + '</div></div>' + right };
+  }
+  function progressRows() {
+    var rows = [];
+    if (S.mode === 'gavexA') {
+      var labels = [['A1', '独立盲审 α / β / γ', '3 席异构模型互不可见'], ['A2', '匿名互换 · 交叉质询', '支持 / 反驳 + 反例探针'], ['A3', '实证探针闭合', '18 项真实环境探针'], ['A4', '共识签发', '动态收敛 · 2 轮']];
+      labels.forEach(function (l, i) {
+        var st = S.audit > i + 1 ? 'pass' : S.audit === i + 1 ? 'run' : 'locked';
+        rows.push(rowHTML(st, l[0], l[1], l[2], i === 3 ? 'UNCONDITIONAL_CONSENSUS ✅' : 'DONE', i === 3 && S.audit === 5, true));
+      });
+      return rows;
+    }
+    if (S.mode === 'gavexAB') {
+      var a = S.audit >= 5 ? 'pass' : S.audit > 0 ? 'run' : 'locked';
+      rows.push(rowHTML(a, 'gavexA', '异构对抗会审', '3 席盲审 · 18 探针 · 共识方案输入 Step 0', 'UNCONDITIONAL_CONSENSUS ✅', false, true));
+    }
+    rows.push(rowHTML(S.plan, 'STEP 0', 'Main-Agent 规划拆解', '6 步 · 14 Workers · Write-Scope 冲突 0', 'PLAN_LOCKED ✅', S.planFresh, true));
+    STEPS.forEach(function (d, i) {
+      var st = S.steps[i];
+      var sub = d.workers.length + ' Workers · ' + st.probes.filter(function (x) { return x === 'ok'; }).length + '/' + d.verifier.probes.length + ' 探针' + (st.reworks ? ' · 打回 ' + st.reworks + ' 次' : '');
+      rows.push(rowHTML(st.status, 'STEP ' + d.k, d.short, sub, 'STEP_' + d.k + '_VERIFIED_PASS ✅', st.fresh));
+    });
+    rows.push(rowHTML(S.final, 'FINAL', 'Main-Agent 独立总验收', '真实入口全链路 · 42 项全量回归', 'GAVEX_FINAL_ACCEPTED ✅', S.finalFresh, true));
+    return rows;
+  }
+  var plistKey = '';
+  function renderProgress() {
+    var rows = progressRows(), list = $('#plist');
+    if (plistKey !== S.mode + rows.length) {
+      plistKey = S.mode + rows.length;
+      list.innerHTML = rows.map(function () { return '<li></li>'; }).join('');
+    }
+    var lis = list.children;
+    rows.forEach(function (r, i) { setClass(lis[i], r.cls); setHTML(lis[i], r.html); });
+    var frac = progressFrac();
+    $('#progPct').textContent = Math.round(frac * 100) + '%';
+    $('#progBar').style.width = (frac * 100).toFixed(1) + '%';
+    $('#progMeta').textContent = '模拟用时 ' + dur(S.clock) + ' · 事件 ' + S.events.length;
+    var now = '已闭环';
+    if (S.playing || S.sim !== null) {
+      var cur = null;
+      if (S.mode !== 'gavexB' && S.audit > 0 && S.audit < 5) cur = 'gavexA 会审';
+      else if (S.plan === 'run') cur = 'Step 0';
+      else S.steps.forEach(function (st, i) { if (!cur && st.status !== 'pass' && st.status !== 'locked') cur = 'Step ' + STEPS[i].k; });
+      if (!cur && S.final === 'run') cur = 'Final';
+      now = '当前：' + (cur || '准备中');
+    }
+    setHTML($('#progNow'), now);
+  }
+
+  /* ================= render: timeline ================= */
+  var TL_GROUP = { PLAN: 'dispatch', SPAWN: 'dispatch', SUBMIT: 'dispatch', AUDIT: 'dispatch', WAIT: 'watchdog', PATROL: 'watchdog', STEER: 'watchdog', VERIFY: 'verify', REJECT: 'verify', PASS: 'verify' };
+  var TL_PILL = { PLAN: 'violet', AUDIT: 'violet', SPAWN: 'blue', SUBMIT: '', WAIT: '', PATROL: 'violet', STEER: 'amber', VERIFY: 'green', REJECT: 'rose', PASS: 'green' };
+  function evHTML(e) {
+    return '<span class="node"></span><div class="ev-top"><time>' + clock(e.t) + '</time><span class="pill xs mono ' + TL_PILL[e.type] + '">' + e.type + '</span>' +
+      (e.k ? '<span class="step">Step ' + e.k + '</span>' : '<span class="step">Main-Agent</span>') +
+      '</div><code>' + esc(e.tool) + '</code><p>' + esc(e.msg) + '</p>';
+  }
+  function tlMatch(e) { return S.tl === 'all' || TL_GROUP[e.type] === S.tl; }
+  function renderTimeline() {
+    var list = $('#tl'), items = S.events.filter(tlMatch).slice().reverse();
+    list.innerHTML = items.length ? items.map(function (e) { return '<li class="ev t-' + e.type + '">' + evHTML(e) + '</li>'; }).join('') : '<li class="tl-empty">等待事件…</li>';
+    updateTlCount();
+  }
+  function pushEvent(e) {
+    if (tlMatch(e)) {
+      var list = $('#tl'), empty = $('.tl-empty', list);
+      if (empty) empty.remove();
+      var li = document.createElement('li');
+      li.className = 'ev enter t-' + e.type;
+      li.innerHTML = evHTML(e);
+      list.insertBefore(li, list.firstChild);
+    }
+    updateTlCount();
+  }
+  function updateTlCount() { $('#tlCount').textContent = S.events.filter(tlMatch).length + ' / ' + S.events.length + ' events'; }
+
+  /* ================= render: audit ================= */
+  function buildAudit() {
+    $('#revGrid').innerHTML = REVIEWERS.map(function (r, i) { return '<article class="rev" id="rev' + i + '"></article>'; }).join('');
+  }
+  function renderAudit() {
+    var a = S.audit;
+    REVIEWERS.forEach(function (r, i) {
+      var state = a === 0 ? 'idle' : a < 4 ? 'run' : 'done';
+      var phase = a === 1 ? ['blue', '盲审中'] : a === 2 ? ['amber', '交叉质询'] : a === 3 ? ['green', '跑探针'] : null;
+      var status = state === 'idle' ? '<span class="pill xs">待派出</span>'
+        : state === 'run' ? '<span class="pill xs ' + phase[0] + '">' + spin('c-' + phase[0]) + phase[1] + '</span>'
+        : '<span class="pill xs green">✓ 已闭合</span>';
+      var conf = a >= 2 ? r.conf : 0;
+      setClass($('#rev' + i), 'rev is-' + state);
+      setHTML($('#rev' + i),
+        '<div class="rev-head"><span class="greek">' + r.id + '</span><span class="name">Reviewer ' + r.id + '</span>' + status +
+        '<span class="trait">' + esc(r.trait) + '</span></div>' +
+        '<span class="pill mono xs multi">' + esc(r.model) + '</span>' +
+        '<p class="verdict' + (a >= 2 ? '' : ' dim') + '">' + (a >= 2 ? esc(r.verdict) : '独立盲审中，结论对其他席位不可见…') + '</p>' +
+        '<div class="conf"><span>置信度</span><div class="bar"><i style="width:' + (conf * 100) + '%"></i></div><span class="num">' + (a >= 2 ? conf.toFixed(2) : '—') + '</span></div>' +
+        '<div class="foot"><span class="pill xs mono">probes ' + (a >= 3 ? r.probes : 0) + '</span>' + (a >= 3 ? '<span class="pill xs ' + r.stance[0] + '">' + esc(r.stance[1]) + '</span>' : '') + '</div>');
+    });
+    var c = $('#consensus');
+    setClass(c, 'consensus' + (a >= 5 ? ' done' : ''));
+    setHTML(c, a >= 5
+      ? I.checkV + '<span class="stamp violet">UNCONDITIONAL_CONSENSUS</span><span>18/18 probes closed · 2 rounds</span><span class="arrow">→</span><span>共识方案：<b>事件驱动调度 + 幂等键去重</b>，作为 gavexB Step 0 输入</span>'
+      : (a ? spin('c-violet') : I.idle) + '<span>' + (a ? '收敛中：仅针对分歧点开下一轮，探针未闭合前不得宣布共识' : '等待会审开始') + '</span>');
+    setHTML($('#auditState'), a >= 5 ? '<span class="pill xs violet">✓ 已共识</span>' : a ? '<span class="pill xs violet live"><span class="dot"></span>Round ' + (a >= 3 ? 2 : 1) + '</span>' : '<span class="pill xs">待开始</span>');
+  }
+
+  /* ================= render: lanes ================= */
+  function scopeRoot(p) { return p.replace(/\/\*\*$/, '/'); }
+  function scopesOverlap(a, b) {
+    return a.some(function (x) {
+      return b.some(function (y) {
+        var rx = scopeRoot(x), ry = scopeRoot(y);
+        return rx === ry || (rx.slice(-1) === '/' && ry.indexOf(rx) === 0) || (ry.slice(-1) === '/' && rx.indexOf(ry) === 0);
+      });
+    });
+  }
+  function wsMatrixHTML(d) {
+    var pairs = [];
+    for (var a = 0; a < d.workers.length; a++) for (var b = a + 1; b < d.workers.length; b++) {
+      var A = d.workers[a], B = d.workers[b], hit = scopesOverlap(A.scope, B.scope);
+      pairs.push('<span class="pill xs mono ' + (hit ? 'rose' : 'green') + '">' + d.k + '-' + A.x + ' ∩ ' + d.k + '-' + B.x + ' = ' + (hit ? '冲突' : '∅') + '</span>');
+    }
+    var total = d.workers.reduce(function (n, w) { return n + w.scope.length; }, 0);
+    return '<div class="ws-matrix"><div class="sec-label">🔒 同阶 Write-Scope 互斥校验<small>派工前由 Main-Agent 执行</small></div>' +
+      '<div class="ws-row"><span class="k">两两求交</span>' + pairs.join('') + '</div>' +
+      '<div class="ws-row"><span class="k">白名单路径</span><span class="pill xs mono">' + total + ' paths</span><span>其余全部路径只读；越界写入由 Verifier ' + d.k + ' 以 <code>git diff --name-only</code> 一票否决。</span></div></div>';
+  }
+  function buildLanes() {
+    var html = '';
+    STEPS.forEach(function (d, i) {
+      var k = d.k;
+      html += '<section class="lane" id="lane' + i + '" data-i="' + i + '">' +
+        '<div class="lane-head">' +
+          '<button type="button" class="lane-toggle" aria-expanded="true" aria-controls="lb' + i + '" data-toggle="' + i + '">' + I.chev +
+            '<span class="k">STEP ' + k + '</span><span class="ttl">' + esc(d.title) + '</span></button>' +
+          '<span id="ls' + i + '"></span><span class="lane-meta" id="lm' + i + '"></span>' +
+        '</div>' +
+        '<div class="lane-body" id="lb' + i + '"><div class="lane-clip"><div class="lane-inner">' +
+          '<div><div class="col-label"><span class="eyebrow">并行施工 · Workers</span><span class="rule"></span><span class="pill xs blue">' + d.workers.length + ' 并行 · 非重叠 Write-Scope</span></div>' +
+            '<div class="workers">' + d.workers.map(function (w) { return '<article class="wcard" id="wc' + i + w.x + '"></article>'; }).join('') + '</div>' +
+            wsMatrixHTML(d) + '</div>' +
+          '<div><div class="col-label"><span class="eyebrow">独立守门 · Verifier</span><span class="rule"></span></div>' +
+            '<article class="vcard" id="vc' + i + '">' +
+              '<div class="vh"><div class="vname"><b>Verifier ' + k + '</b><span>Step ' + k + ' 专职独立审验员</span></div>' +
+                '<div class="vtags"><span class="pill mono xs multi green">' + esc(d.verifier.model) + '</span><span class="pill xs">全仓只读</span><span class="pill xs">非本阶 Worker</span><span id="vround' + i + '"></span></div></div>' +
+              '<div class="gates" id="vg' + i + '"></div>' +
+              '<div><div class="sec-label">实跑探针证据<small id="vpc' + i + '"></small></div><ul class="probes">' +
+                d.verifier.probes.map(function (_, j) { return '<li class="probe" id="vp' + i + '_' + j + '"></li>'; }).join('') + '</ul></div>' +
+              '<div class="rework"><div class="rework-head"><b>🛠️ 问题发现与打回重修闭环</b><span id="rwr' + i + '"></span>' +
+                '<button type="button" class="btn sm" data-sim="' + i + '">' + I.play + '模拟打回与重修流转</button></div>' +
+                '<ol class="rw-steps" id="rw' + i + '"></ol></div>' +
+            '</article></div>' +
+        '</div></div></div>' +
+      '</section>' +
+      '<div class="gate-link" id="gl' + i + '"><span class="stem"></span><span id="gp' + i + '"></span><span class="stem"></span></div>';
+    });
+    $('#lanes').innerHTML = html + '<div class="lanes-empty" id="lanesEmpty" hidden>当前筛选条件下没有匹配的 Step。</div>';
+  }
+  var LANE_PILL = {
+    locked: '<span class="pill xs">🔒 LOCKED · 等待前序签发</span>',
+    build: '<span class="pill xs blue">' + spin('c-blue') + '并行施工中</span>',
+    verify: '<span class="pill xs green">' + spin('c-green') + '独立验工中</span>',
+    rework: '<span class="pill xs amber">' + spin('c-amber') + '打回重修中</span>',
+    recheck: '<span class="pill xs green">' + spin('c-green') + '二次复核中</span>'
+  };
+  function workerHTML(d, w, state, st) {
+    var pill = {
+      idle: '<span class="pill xs">🔒 待解锁</span>',
+      run: '<span class="pill xs blue">' + spin('c-blue') + '施工中</span>',
+      done: '<span class="pill xs blue">✓ 已交卷</span>',
+      rework: '<span class="pill xs amber">' + spin('c-amber') + '重修中 · Round 1</span>',
+      fixed: '<span class="pill xs green">✓ 重修已交卷 · R1</span>'
+    }[state];
+    var hit = st.reworks && d.verifier.defect.w === w.x;
+    return '<div class="wh"><div class="wname"><b>Worker ' + d.k + '-' + w.x + '</b><span>' + esc(w.role) + '</span></div>' +
+      '<span class="pill mono xs multi blue">' + esc(w.model) + '</span></div>' +
+      '<div class="scope"><div class="sec-label">🔒 Write-Scope 白名单<small>' + w.scope.length + ' path' + (w.scope.length > 1 ? 's' : '') + '</small></div><ul>' +
+        w.scope.map(function (s) { return '<li>' + I.lockS + '<span>' + esc(s) + '</span></li>'; }).join('') + '</ul></div>' +
+      '<div><div class="sec-label">施工条目<small>' + w.tasks.length + ' items</small></div><ul class="tasks">' +
+        w.tasks.map(function (t) { return '<li>' + I.tick + '<span>' + esc(t) + '</span></li>'; }).join('') + '</ul></div>' +
+      '<div class="wf">' + pill + '<span class="num">落盘 ' + w.saves + ' 次 · ' + w.mins + ' min' + (hit ? ' · 打回 1' : '') + '</span></div>';
+  }
+  function gateState(d, st, g) {
+    var idx = [];
+    d.verifier.probes.forEach(function (p, j) { if (p.g === g) idx.push(j); });
+    if (!idx.length) return 'na';
+    var ps = idx.map(function (j) { return st.probes[j]; });
+    if (ps.indexOf('fail') >= 0) return 'fail';
+    if (ps.indexOf('run') >= 0) return 'run';
+    if (ps.every(function (x) { return x === 'ok'; })) return 'ok';
+    return 'idle';
+  }
+  function renderLane(i) {
+    var d = STEPS[i], st = S.steps[i], k = d.k, v = d.verifier, df = v.defect;
+    var lane = $('#lane' + i);
+    setClass(lane, 'lane' + (S.collapsed[i] ? ' collapsed' : '') + (st.status !== 'pass' && st.status !== 'locked' ? ' is-active' : ''));
+    $('[data-toggle="' + i + '"]', lane).setAttribute('aria-expanded', String(!S.collapsed[i]));
+    setHTML($('#ls' + i), st.status === 'pass' ? '<span class="stamp' + (st.fresh ? ' fresh' : '') + '">STEP_' + k + '_VERIFIED_PASS ✅</span>' : LANE_PILL[st.status]);
+    var okN = st.probes.filter(function (x) { return x === 'ok'; }).length;
+    setHTML($('#lm' + i), '<span class="num">' + d.workers.length + ' Workers</span>·<span class="num">' + okN + '/' + v.probes.length + ' 探针</span>·<span>打回 ' + st.reworks + ' 次</span>');
+
+    d.workers.forEach(function (w) {
+      var state = st.workers[w.x], el = $('#wc' + i + w.x);
+      setClass(el, 'wcard is-' + state);
+      setHTML(el, workerHTML(d, w, state, st));
+    });
+
+    setClass($('#vc' + i), 'vcard is-' + (st.status === 'locked' || st.status === 'build' ? 'idle' : st.status === 'rework' ? 'rework' : 'ok'));
+    setHTML($('#vround' + i), st.round ? '<span class="pill xs amber mono">Verifier ' + k + '′ · fresh ctx</span>' : '');
+    setHTML($('#vg' + i), GATES.map(function (g) {
+      var s = gateState(d, st, g.id);
+      var map = { ok: ['green', '✓'], fail: ['rose', '✕'], run: ['blue', ''], idle: ['', '·'], na: ['', 'N/A'] }[s];
+      return '<span class="pill xs ' + map[0] + '" title="' + esc(g.name) + '">' + (s === 'run' ? spin('c-blue') : '') + '<b class="mono">' + g.id + '</b> ' + esc(g.name) + (map[1] ? ' ' + map[1] : '') + '</span>';
+    }).join(''));
+    $('#vpc' + i).textContent = okN + '/' + v.probes.length + ' passed';
+    v.probes.forEach(function (p, j) {
+      var s = st.probes[j], el = $('#vp' + i + '_' + j);
+      var icon = s === 'ok' ? I.check : s === 'fail' ? I.cross : s === 'run' ? spin('c-blue') : I.idle;
+      var res = s === 'ok' ? p.ok : s === 'fail' ? p.fail : s === 'run' ? 'running…' : 'pending';
+      setClass(el, 'probe is-' + s);
+      setHTML(el, icon + '<div><code>' + esc(p.cmd) + '</code><span class="gate-tag">' + p.g + '</span></div><span class="res">' + esc(res) + '</span>');
+    });
+
+    setHTML($('#rwr' + i), st.reworks ? '<span class="pill xs amber mono">Round ' + st.reworks + '</span>' : '');
+    var scope = d.workers.filter(function (w) { return w.x === df.w; })[0].scope;
+    var stages = [
+      { c: 'rose', t: '① 首轮发现', tag: '<span class="pill xs rose mono">' + v.probes[df.p].g + '</span>', p: esc(df.found) },
+      { c: 'amber', t: '② 打回 Worker ' + k + '-' + df.w, tag: '<span class="pill xs rose mono">STEP_' + k + '_REJECTED</span>', p: '定点派回缺陷归属者，Write-Scope 不变：' + scope.map(function (s) { return '<code>' + esc(s) + '</code>'; }).join(' ') },
+      { c: 'blue', t: '③ 定点重修', tag: '<span class="pill xs blue mono">round=1</span>', p: esc(df.fix) },
+      { c: 'green', t: '④ 二次复核 · 全量重跑', tag: st.rw >= 4 ? '<span class="stamp' + (st.fresh ? ' fresh' : '') + '">STEP_' + k + '_VERIFIED_PASS ✅</span>' : '', p: esc(df.recheck) + (k < STEPS.length ? ' 解锁 Step ' + (k + 1) + '。' : ' 移交 Final 总验收。') }
+    ];
+    setHTML($('#rw' + i), stages.map(function (sg, j) {
+      var done = st.rw > j, active = st.rwAct === j && !done;
+      var cls = done ? 'is-done' : active ? 'is-active' : 'is-todo';
+      var mk = done ? '<span class="mk ' + sg.c + '"></span>' : active ? '<span class="mk">' + spin('c-' + sg.c) + '</span>' : '<span class="mk"></span>';
+      return '<li class="rw ' + cls + '">' + mk + '<div><div class="rt">' + sg.t + ' ' + (done || active ? sg.tag : '') + '</div><p>' + sg.p + '</p></div></li>';
+    }).join(''));
+
+    var gp = st.status === 'pass'
+      ? '<span class="pill xs green">🔓 STEP_' + k + '_VERIFIED_PASS → ' + (k < STEPS.length ? '解锁 Step ' + (k + 1) : '进入 Final 总验收') + '</span>'
+      : '<span class="pill xs">🔒 等待 Verifier ' + k + ' 签发后解锁' + (k < STEPS.length ? ' Step ' + (k + 1) : ' Final') + '</span>';
+    setHTML($('#gp' + i), gp);
+  }
+  function laneVisible(i) {
+    var f = S.filter, s = S.steps[i].status;
+    if (f === 'all') return true;
+    if (f.indexOf('s') === 0) return 's' + i === f;
+    if (f === 'active') return s !== 'pass' && s !== 'locked';
+    if (f === 'pass') return s === 'pass';
+    if (f === 'locked') return s === 'locked';
+    return true;
+  }
+  function buildFilters() {
+    var opts = [['all', '全部']].concat(STEPS.map(function (d, i) { return ['s' + i, '<span class="mono">Step ' + d.k + '</span>']; }))
+      .concat([['active', '进行中'], ['pass', '已签发 PASS'], ['locked', '待解锁']]);
+    $('#filterChips').innerHTML = opts.map(function (o) {
+      return '<button type="button" class="chip" data-filter="' + o[0] + '" aria-pressed="false">' + o[1] + '</button>';
+    }).join('');
+  }
+  function renderFilters() {
+    $$('#filterChips .chip').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-filter') === S.filter)); });
+  }
+  function renderLanes() {
+    var any = false;
+    STEPS.forEach(function (_, i) {
+      renderLane(i);
+      var vis = laneVisible(i);
+      $('#lane' + i).hidden = !vis; $('#gl' + i).hidden = !vis || (S.filter !== 'all' && S.filter.indexOf('s') === 0);
+      if (vis) any = true;
+    });
+    $('#lanesEmpty').hidden = any;
+    renderFilters();
+    $$('[data-sim]').forEach(function (b) { b.disabled = S.playing || S.sim !== null || S.steps[+b.getAttribute('data-sim')].status === 'locked'; });
+  }
+
+  /* ================= render: chrome ================= */
+  function renderChrome() {
+    $$('#modeSeg button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-mode') === S.mode)); });
+    $$('#speedSeg button').forEach(function (b) { b.setAttribute('aria-pressed', String(+b.getAttribute('data-speed') === S.speed)); });
+    $$('#tlSeg button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-tl') === S.tl)); });
+    setHTML($('#replayBtn'), S.playing ? I.stop + '停止并跳到终态' : I.play + '实时回放');
+    var busy = S.playing || S.sim !== null;
+    setHTML($('#livePill'), busy ? '<span class="pill xs blue live"><span class="dot"></span>LIVE · ' + S.speed + '×</span>' : '<span class="pill xs green"><span class="dot"></span>' + (S.mode === 'gavexA' ? 'CONSENSUS' : 'GAVEX_FINAL_ACCEPTED') + '</span>');
+    var dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    $('#themeBtn').innerHTML = dark ? I.sun : I.moon;
+    $('#themeBtn').setAttribute('aria-label', dark ? '切换到浅色' : '切换到深色');
+    $('#auditPanel').hidden = !hasA();
+    $('#lanesSection').hidden = !hasB();
+  }
+
+  function render(full) {
+    renderChrome();
+    renderKPI(false);
+    renderProgress();
+    if (full) renderTimeline(); else updateTlCount();
+    if (hasA()) renderAudit();
+    if (hasB()) renderLanes();
+    S.planFresh = S.finalFresh = false;
+    S.steps.forEach(function (s) { s.fresh = false; });
+  }
+
+  /* ================= events ================= */
+  document.addEventListener('click', function (ev) {
+    var t = ev.target.closest('button');
+    if (!t) return;
+    if (t.hasAttribute('data-mode')) {
+      var m = t.getAttribute('data-mode');
+      if (m === S.mode && !S.playing) return;
+      S.mode = m;
+      var u = new URL(location.href); u.searchParams.set('mode', m); history.replaceState(null, '', u);
+      jumpToEnd().then(function () { renderKPI(true); });
+    } else if (t.hasAttribute('data-speed')) {
+      S.speed = +t.getAttribute('data-speed'); renderChrome();
+    } else if (t.hasAttribute('data-tl')) {
+      S.tl = t.getAttribute('data-tl'); renderChrome(); renderTimeline();
+    } else if (t.hasAttribute('data-filter')) {
+      S.filter = t.getAttribute('data-filter');
+      if (S.filter.indexOf('s') === 0) S.collapsed[+S.filter.slice(1)] = false;
+      renderLanes();
+    } else if (t.hasAttribute('data-toggle')) {
+      var i = +t.getAttribute('data-toggle'); S.collapsed[i] = !S.collapsed[i]; renderLane(i);
+    } else if (t.hasAttribute('data-sim')) {
+      simulate(+t.getAttribute('data-sim'));
+    } else if (t.id === 'replayBtn') {
+      if (S.playing) jumpToEnd(); else play();
+    } else if (t.id === 'themeBtn') {
+      var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      try { localStorage.setItem('gavex-theme', next); } catch (e) {}
+      renderChrome();
+    } else if (t.id === 'expandAll' || t.id === 'collapseAll') {
+      STEPS.forEach(function (_, i) { S.collapsed[i] = t.id === 'collapseAll'; });
+      renderLanes();
+    }
+  });
+
+  /* ================= boot ================= */
+  buildAudit();
+  buildLanes();
+  buildFilters();
+  jumpToEnd().then(function () {
+    if (!prefersReduced && params.get('replay') !== '0') play();
+  });
+  window.__gavex = { state: S, play: play, jumpToEnd: jumpToEnd, simulate: simulate };
+})();
+</script>
+</body>
+</html>

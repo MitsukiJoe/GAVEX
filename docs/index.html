@@ -1,0 +1,789 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GAVEX — Guarded Audit &amp; Verifier-gated Execution</title>
+<meta name="description" content="GAVEX — Guarded Audit &amp; Verifier-gated Execution. Guarded Write-Scopes, Adversarial Cross-Audit, Verifier Veto Gates and an Execution Pipeline for evidence-backed multi-agent delivery.">
+<meta property="og:title" content="GAVEX — Guarded Audit &amp; Verifier-gated Execution">
+<meta property="og:description" content="Parallel workers build. An independent verifier decides. Zero-regression multi-agent execution protocol.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f1218'/%3E%3Cpath d='M14 5l11 11M12 7l4-4M23 18l4-4M19 12 8 23M5 27h14' fill='none' stroke='%233b82f6' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<script>
+  (function () {
+    var d = document.documentElement, q = new URLSearchParams(location.search);
+    try {
+      var t = q.get('theme') || localStorage.getItem('gavex-theme') || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      d.setAttribute('data-theme', t === 'light' ? 'light' : 'dark');
+      var l = q.get('lang') || localStorage.getItem('gavex-lang') || ((navigator.language || 'zh').toLowerCase().indexOf('zh') === 0 ? 'zh' : 'en');
+      d.lang = l === 'en' ? 'en' : 'zh-CN';
+    } catch (e) {}
+  })();
+</script>
+<style>
+  :root {
+    --font: Inter, "SF Pro Text", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+    --mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    --blue: #3b82f6; --green: #10b981; --amber: #f59e0b; --rose: #f43f5e; --violet: #8b5cf6;
+    --blue-bd: rgba(59,130,246,.30);  --blue-bg: rgba(59,130,246,.06);
+    --green-bd: rgba(16,185,129,.32); --green-bg: rgba(16,185,129,.06);
+    --amber-bd: rgba(245,158,11,.36); --amber-bg: rgba(245,158,11,.07);
+    --rose-bd: rgba(244,63,94,.34);   --rose-bg: rgba(244,63,94,.07);
+    --violet-bd: rgba(139,92,246,.30);--violet-bg: rgba(139,92,246,.06);
+    --ease: cubic-bezier(.2,.8,.2,1);
+  }
+  html[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0a0c10; --s1: #0f1218; --s2: #141821; --s3: #1a1f2a;
+    --line: rgba(148,163,184,.14); --line-strong: rgba(148,163,184,.26);
+    --fg: #e7eaf0; --fg-2: #a1aab9; --fg-3: #7c8598;
+    --blue-fg: #93c5fd; --green-fg: #6ee7b7; --amber-fg: #fcd34d; --rose-fg: #fda4af; --violet-fg: #c4b5fd;
+    --btn-fg: #0a0c10;
+  }
+  html[data-theme="light"] {
+    color-scheme: light;
+    --bg: #f5f6f8; --s1: #ffffff; --s2: #fafbfc; --s3: #f1f3f6;
+    --line: rgba(15,23,42,.08); --line-strong: rgba(15,23,42,.16);
+    --fg: #0f172a; --fg-2: #475569; --fg-3: #64748b;
+    --blue-fg: #1d4ed8; --green-fg: #047857; --amber-fg: #b45309; --rose-fg: #be123c; --violet-fg: #6d28d9;
+    --btn-fg: #ffffff;
+  }
+  html[lang="en"] .zh, html:not([lang="en"]) .en { display: none !important; }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--fg); font: 15px/1.6 var(--font); -webkit-font-smoothing: antialiased; transition: background-color .16s, color .16s; }
+  h1, h2, h3, h4, p { margin: 0; }
+  ul, ol { margin: 0; padding: 0; list-style: none; }
+  a { color: inherit; text-decoration: none; }
+  code, pre, .mono { font-family: var(--mono); }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 6px; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+  section.block { padding: 88px 0 0; }
+  .eyebrow { font: 600 11px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--fg-3); }
+  .sec-head { display: grid; gap: 12px; max-width: 760px; margin-bottom: 36px; }
+  .sec-head h2 { font-size: 34px; line-height: 1.2; letter-spacing: -.025em; font-weight: 650; }
+  .sec-head p { color: var(--fg-2); font-size: 16px; }
+  .ic { width: 16px; height: 16px; flex: none; display: block; }
+  .spin { animation: rot .9s linear infinite; }
+  @keyframes rot { to { transform: rotate(360deg); } }
+
+  .pill { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--s3); color: var(--fg-2); font-size: 12px; font-weight: 500; white-space: nowrap; }
+  .pill.xs { min-height: 20px; padding: 0 7px; font-size: 11px; }
+  .pill.mono { font-family: var(--mono); font-size: 11.5px; }
+  .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .pill.blue { color: var(--blue-fg); border-color: var(--blue-bd); background: var(--blue-bg); }
+  .pill.green { color: var(--green-fg); border-color: var(--green-bd); background: var(--green-bg); }
+  .pill.amber { color: var(--amber-fg); border-color: var(--amber-bd); background: var(--amber-bg); }
+  .pill.rose { color: var(--rose-fg); border-color: var(--rose-bd); background: var(--rose-bg); }
+  .pill.violet { color: var(--violet-fg); border-color: var(--violet-bd); background: var(--violet-bg); }
+  .stamp { display: inline-flex; align-items: center; gap: 6px; min-height: 22px; padding: 0 9px; border-radius: 999px; border: 1px solid var(--green-bd); background: var(--green-bg); color: var(--green-fg); font: 600 11px/1.2 var(--mono); white-space: nowrap; }
+  .stamp.in { animation: stamp .26s cubic-bezier(.2,.9,.3,1.2); }
+  @keyframes stamp { from { transform: scale(1.3) rotate(-4deg); opacity: 0; } }
+
+  .btn { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--line); background: transparent; color: var(--fg); font-size: 14px; font-weight: 550; white-space: nowrap; transition: background-color .16s, border-color .16s, opacity .16s; }
+  .btn:hover { background: var(--s3); border-color: var(--line-strong); }
+  .btn.primary { background: var(--fg); border-color: var(--fg); color: var(--btn-fg); }
+  .btn.primary:hover { opacity: .9; background: var(--fg); }
+  .btn.sm { height: 32px; padding: 0 12px; font-size: 13px; border-radius: 8px; }
+  .btn.icon { width: 34px; height: 34px; padding: 0; justify-content: center; border-radius: 8px; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* nav */
+  .nav { position: sticky; top: 0; z-index: 50; background: var(--bg); border-bottom: 1px solid var(--line); }
+  .nav .container { display: flex; align-items: center; gap: 20px; height: 60px; }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 650; letter-spacing: -.01em; }
+  .logo small { color: var(--fg-3); font-weight: 500; font-size: 12px; }
+  .nav-links { display: flex; gap: 4px; margin-left: 12px; }
+  .nav-links a { padding: 6px 10px; border-radius: 8px; color: var(--fg-2); font-size: 13.5px; transition: background-color .16s, color .16s; }
+  .nav-links a:hover { background: var(--s3); color: var(--fg); }
+  .nav-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .lang-btn { height: 34px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: transparent; font: 600 12px/1 var(--mono); color: var(--fg-2); }
+  .lang-btn:hover { background: var(--s3); color: var(--fg); }
+
+  /* hero */
+  .hero { padding: 72px 0 0; }
+  .hero-grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); gap: 48px; align-items: center; }
+  .hero h1 { font-size: 54px; line-height: 1.08; letter-spacing: -.035em; font-weight: 700; margin: 18px 0 18px; }
+  .hero h1 .mutedline { color: var(--fg-3); }
+  .hero .lead { font-size: 17px; color: var(--fg-2); max-width: 560px; }
+  .hero .cta { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 28px; }
+  .hero .platforms { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 28px; }
+  .hero .cmd { margin-top: 18px; display: inline-flex; align-items: center; gap: 10px; padding: 8px 10px 8px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--s1); font: 13px/1.4 var(--mono); color: var(--fg-2); max-width: 100%; }
+  .hero .cmd b { color: var(--fg); font-weight: 600; }
+  .hero .cmd span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .live-card { border: 1px solid var(--line); background: var(--s1); border-radius: 16px; padding: 16px; display: grid; gap: 8px; }
+  .live-card .lc-head { display: flex; align-items: center; gap: 8px; padding: 2px 2px 8px; }
+  .live-card .lc-head b { font-size: 13px; }
+  .live-card .lc-head .pill { margin-left: auto; }
+  .lc-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--s2); font-size: 13px; }
+  .lc-row .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lc-row .t small { color: var(--fg-3); font: 600 10.5px/1 var(--mono); margin-right: 8px; letter-spacing: .04em; }
+  .lc-row.run { border-color: var(--blue-bd); background: var(--blue-bg); }
+  .lc-row.rej { border-color: var(--amber-bd); background: var(--amber-bg); }
+  .lc-row.lock { opacity: .55; }
+  .lc-note { display: grid; grid-template-columns: 18px 1fr; gap: 10px; padding: 10px; border-radius: 10px; border: 1px solid var(--rose-bd); background: var(--rose-bg); font-size: 12.5px; color: var(--fg-2); }
+  .lc-note code { font-size: 11.5px; color: var(--rose-fg); }
+
+  .stats { margin-top: 56px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .stat { background: var(--s1); padding: 18px 20px; }
+  .stat b { display: block; font-size: 28px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .stat span { color: var(--fg-3); font-size: 12.5px; }
+
+  /* G-A-V-EX pillars: uniform perimeter only, no side accents */
+  .pillars { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+  .pillar { min-width: 0; padding: 22px; border: 1px solid var(--line); border-radius: 16px; background: var(--s1); display: grid; gap: 12px; align-content: start; }
+  .pillar .letter { font: 650 24px/1 var(--mono); color: var(--blue-fg); }
+  .pillar h3 { font-size: 16px; line-height: 1.4; overflow-wrap: anywhere; }
+  .pillar p, .protocol-note { color: var(--fg-2); font-size: 14px; }
+  .protocol-note { margin-top: 20px; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--s1); overflow-wrap: anywhere; }
+  .protocol-note p + p { margin-top: 12px; }
+  .protocol-note b { color: var(--fg); }
+
+  /* vs */
+  .vs { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .vs-card { border-radius: 16px; padding: 24px; border: 1px solid var(--line); background: var(--s1); display: grid; gap: 16px; align-content: start; }
+  .vs-card.bad { border-color: var(--rose-bd); }
+  .vs-card.good { border-color: var(--green-bd); }
+  .vs-card h3 { font-size: 18px; letter-spacing: -.01em; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .vs-list { display: grid; gap: 12px; }
+  .vs-list li { display: grid; grid-template-columns: 22px 1fr; gap: 10px; }
+  .vs-list li b { display: block; font-size: 14.5px; font-weight: 600; }
+  .vs-list li p { color: var(--fg-2); font-size: 13.5px; margin-top: 2px; }
+  .vs-list .mk { width: 20px; height: 20px; border-radius: 6px; display: grid; place-items: center; font: 700 12px/1 var(--mono); margin-top: 1px; }
+  .bad .mk { color: var(--rose-fg); border: 1px solid var(--rose-bd); background: var(--rose-bg); }
+  .good .mk { color: var(--green-fg); border: 1px solid var(--green-bd); background: var(--green-bg); }
+  .mono-blob { font: 12px/1.6 var(--mono); color: var(--fg-3); padding: 12px 14px; border-radius: 10px; background: var(--s2); border: 1px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+  /* sandbox */
+  .sandbox { border: 1px solid var(--line); background: var(--s1); border-radius: 18px; overflow: hidden; }
+  .sb-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+  .sb-bar .grow { flex: 1; }
+  .toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--fg-2); cursor: pointer; user-select: none; }
+  .toggle input { appearance: none; width: 32px; height: 18px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--s3); position: relative; cursor: pointer; transition: background-color .16s, border-color .16s; margin: 0; }
+  .toggle input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--fg-3); transition: transform .16s var(--ease), background-color .16s; }
+  .toggle input:checked { background: var(--amber-bg); border-color: var(--amber-bd); }
+  .toggle input:checked::after { transform: translateX(14px); background: var(--amber); }
+  .sb-body { display: grid; grid-template-columns: minmax(0, 1fr) 290px; }
+  .sb-stage { padding: 20px; display: grid; gap: 14px; background: var(--s2); }
+  .sb-main { justify-self: center; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--violet-bd); background: var(--violet-bg); font-size: 13px; }
+  .sb-main b { color: var(--violet-fg); }
+  .sb-plan { display: flex; gap: 6px; flex-wrap: wrap; }
+  .sb-plan .pill { opacity: 0; transform: translateY(-4px); transition: opacity .25s, transform .25s; }
+  .sb-plan .pill.on { opacity: 1; transform: none; }
+  .sb-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: stretch; }
+  .sb-step { min-width: 0; border-radius: 12px; border: 1px solid var(--line); background: var(--s1); padding: 12px; display: grid; gap: 10px; align-content: start; transition: border-color .2s, opacity .2s; }
+  .sb-step.locked { opacity: .5; }
+  .sb-step.active { border-color: var(--blue-bd); }
+  .sb-step.pass { border-color: var(--green-bd); }
+  .sb-step .h { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 12.5px; font-weight: 600; }
+  .sb-step .h small { font: 600 10.5px/1 var(--mono); color: var(--fg-3); letter-spacing: .06em; }
+  .sb-workers { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .sbw { min-width: 0; display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--line); background: var(--s2); font-size: 12px; transition: border-color .2s, background-color .2s; }
+  .sbw .ic { width: 14px; height: 14px; }
+  .sbw > span { white-space: nowrap; }
+  .sbw code { font-size: 10.5px; color: var(--fg-3); margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .sbw.run, .sbw.done { border-color: var(--blue-bd); background: var(--blue-bg); }
+  .sbw.rework { border-color: var(--amber-bd); background: var(--amber-bg); }
+  .sbv { display: flex; align-items: center; gap: 8px; padding: 8px 9px; border-radius: 8px; border: 1px solid var(--line); background: var(--s2); font-size: 12px; transition: border-color .2s, background-color .2s; flex-wrap: wrap; }
+  .sbv .ic { width: 14px; height: 14px; }
+  .sb-step { grid-template-columns: minmax(0, 1fr); }
+  .sbv .stamp { font-size: 10.5px; padding: 0 7px; min-height: 20px; }
+  .sbv.run { border-color: var(--green-bd); }
+  .sbv.rej { border-color: var(--rose-bd); background: var(--rose-bg); }
+  .sbv.pass { border-color: var(--green-bd); background: var(--green-bg); }
+  .sb-gate { justify-self: start; }
+  .sb-final { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--s1); font-size: 12.5px; text-align: center; transition: border-color .2s, opacity .2s; }
+  .sb-final.locked { opacity: .5; }
+  .sb-final.pass { border-color: var(--violet-bd); background: var(--violet-bg); }
+  .sb-log { padding: 14px 16px; display: grid; align-content: start; gap: 4px; max-height: 470px; overflow: auto; border-top: 1px solid transparent; }
+  .sb-log h4 { font-size: 12px; color: var(--fg-3); font-weight: 600; margin-bottom: 6px; }
+  .sb-log li { display: grid; grid-template-columns: 44px auto 1fr; gap: 8px; align-items: baseline; font-size: 12px; padding: 5px 0; color: var(--fg-2); animation: fade .16s ease-out; }
+  .sb-log li time { font: 11px/1 var(--mono); color: var(--fg-3); }
+  @keyframes fade { from { opacity: 0; transform: translateY(-3px); } }
+
+  /* gates */
+  .gates { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+  .gate { border: 1px solid var(--line); background: var(--s1); border-radius: 14px; padding: 20px; display: grid; gap: 12px; align-content: start; transition: border-color .16s; }
+  .gate:hover { border-color: var(--line-strong); }
+  .gate .gid { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .gate .gid b { font: 700 13px/1 var(--mono); color: var(--fg-3); }
+  .gate h3 { font-size: 16.5px; letter-spacing: -.01em; }
+  .gate p { color: var(--fg-2); font-size: 13.5px; }
+  .gate pre { margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--s2); border: 1px solid var(--line); font-size: 11.5px; color: var(--fg); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+  /* modes */
+  .modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  .mode { border: 1px solid var(--line); background: var(--s1); border-radius: 14px; padding: 22px; display: grid; gap: 12px; align-content: start; }
+  .mode.feature { border-color: var(--violet-bd); }
+  .mode .cmdname { font: 700 22px/1 var(--mono); letter-spacing: -.02em; }
+  .mode p { color: var(--fg-2); font-size: 13.5px; }
+  .mode ul { display: grid; gap: 6px; }
+  .mode li { display: grid; grid-template-columns: 14px 1fr; gap: 8px; font-size: 13px; color: var(--fg-2); }
+  .mode li svg { width: 14px; height: 14px; margin-top: 3px; color: var(--green); }
+  .mode code.ex { display: block; padding: 10px 12px; border-radius: 8px; background: var(--s2); border: 1px solid var(--line); font-size: 12px; overflow-wrap: anywhere; }
+
+  /* table */
+  .table-wrap { border: 1px solid var(--line); border-radius: 14px; overflow: auto; background: var(--s1); }
+  table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13.5px; min-width: 720px; }
+  th, td { padding: 13px 16px; text-align: start; vertical-align: top; }
+  thead th { font-size: 12px; color: var(--fg-3); font-weight: 600; background: var(--s2); }
+  tbody tr + tr td, thead + tbody tr:first-child td { border-top: 1px solid var(--line); }
+  td:first-child { color: var(--fg); font-weight: 550; white-space: nowrap; }
+  td { color: var(--fg-2); }
+  td .y { color: var(--green-fg); } td .n { color: var(--rose-fg); }
+
+  /* install */
+  .install { display: grid; grid-template-columns: 240px minmax(0, 1fr); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--s1); }
+  .tabs { display: grid; align-content: start; gap: 4px; padding: 12px; background: var(--s2); }
+  .tabs button { display: flex; align-items: center; gap: 10px; text-align: start; padding: 10px 12px; border-radius: 10px; border: 1px solid transparent; background: transparent; color: var(--fg-2); font-size: 14px; font-weight: 500; transition: background-color .16s, color .16s, border-color .16s; }
+  .tabs button:hover { color: var(--fg); background: var(--s3); }
+  .tabs button[aria-selected="true"] { background: var(--s1); color: var(--fg); border-color: var(--line); }
+  .tabs .badge { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; font: 700 11px/1 var(--mono); border: 1px solid var(--line); background: var(--s1); color: var(--fg-2); flex: none; }
+  .tab-panel { padding: 24px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-content: start; min-width: 0; }
+  [hidden] { display: none !important; }
+  .tab-panel h3 { font-size: 18px; }
+  .tab-panel p { color: var(--fg-2); font-size: 14px; }
+  .code { position: relative; border: 1px solid var(--line); border-radius: 10px; background: var(--s2); }
+  .code .lbl { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 8px 8px 14px; font: 600 11px/1 var(--mono); color: var(--fg-3); letter-spacing: .04em; }
+  .code pre { margin: 0; padding: 0 14px 14px; font-size: 12.5px; line-height: 1.65; overflow-x: auto; color: var(--fg); }
+  .code pre .c { color: var(--fg-3); }
+  .copy { height: 26px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--line); background: var(--s1); font-size: 12px; color: var(--fg-2); }
+  .copy:hover { color: var(--fg); border-color: var(--line-strong); }
+  .copy.ok { color: var(--green-fg); border-color: var(--green-bd); }
+
+  /* preview */
+  .frame { border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--s1); }
+  .frame-bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--s2); }
+  .frame-bar .dots { display: flex; gap: 6px; }
+  .frame-bar .dots i { width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--line-strong); }
+  .frame-bar .url { flex: 1; min-width: 0; height: 28px; display: flex; align-items: center; padding: 0 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--s1); font: 12px/1 var(--mono); color: var(--fg-3); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .frame iframe { display: block; width: 100%; height: 760px; border: 0; background: var(--bg); }
+
+  footer.site { margin-top: 96px; border-top: 1px solid var(--line); padding: 32px 0 48px; color: var(--fg-3); font-size: 13px; }
+  footer.site .container { display: flex; gap: 16px; flex-wrap: wrap; justify-content: space-between; }
+  footer.site a { color: var(--fg-2); }
+  footer.site a:hover { color: var(--fg); }
+
+  @media (max-width: 1080px) {
+    .hero-grid { grid-template-columns: minmax(0, 1fr); }
+    .gates, .pillars { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .modes { grid-template-columns: minmax(0, 1fr); }
+    .sb-body { grid-template-columns: minmax(0, 1fr); }
+    .sb-log { border-top-color: var(--line); max-height: 300px; }
+    .nav-links { display: none; }
+  }
+  @media (max-width: 760px) {
+    .container { padding: 0 16px; }
+    .hero { padding-top: 44px; }
+    .hero h1 { font-size: 36px; }
+    .sec-head h2 { font-size: 26px; }
+    section.block { padding-top: 64px; }
+    .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .stat:last-child { grid-column: 1 / -1; }
+    .vs { grid-template-columns: minmax(0, 1fr); }
+    .gates, .pillars { grid-template-columns: minmax(0, 1fr); }
+    .sb-steps { grid-template-columns: minmax(0, 1fr); }
+    .install { grid-template-columns: minmax(0, 1fr); }
+    .tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .tabs button { flex-direction: column; gap: 4px; font-size: 12px; padding: 8px 4px; text-align: center; }
+    .frame iframe { height: 640px; }
+    .logo small { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav" aria-label="Primary">
+  <div class="container">
+    <a class="logo" href="#top">
+      <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect x=".5" y=".5" width="31" height="31" rx="8" fill="none" stroke="currentColor" stroke-opacity=".25"/><path d="M14 5l11 11M12 7l4-4M23 18l4-4M19 12 8 23M5 27h14" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      GAVEX <small>Guarded Execution</small>
+    </a>
+    <div class="nav-links">
+      <a href="#pillars"><span class="zh">四大支柱</span><span class="en">Pillars</span></a>
+      <a href="#sandbox"><span class="zh">工作流沙盘</span><span class="en">Sandbox</span></a>
+      <a href="#gates"><span class="zh">四大门禁</span><span class="en">Veto Gates</span></a>
+      <a href="#modes"><span class="zh">三种模式</span><span class="en">Modes</span></a>
+      <a href="#install"><span class="zh">安装</span><span class="en">Install</span></a>
+      <a href="#dashboard"><span class="zh">看板</span><span class="en">Dashboard</span></a>
+    </div>
+    <div class="nav-actions">
+      <button type="button" class="lang-btn" id="langBtn" aria-label="Switch language"><span class="zh">EN</span><span class="en">中文</span></button>
+      <button type="button" class="btn icon" id="themeBtn" aria-label="Toggle theme"></button>
+      <a class="btn sm" id="ghLink" href="#install">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="container">
+    <div class="hero-grid">
+      <div>
+        <span class="pill violet"><span class="dot"></span><span class="zh">GAVEX · 守界审计与验工门控执行</span><span class="en">GAVEX · Evidence before execution</span></span>
+        <h1>
+          <span class="zh">让子代理并行施工，<br><span class="mutedline">让独立守门员</span>一票否决。</span>
+          <span class="en">Parallel workers build.<br><span class="mutedline">An independent verifier</span> decides.</span>
+        </h1>
+        <p class="lead">
+          <span class="zh">单次巨型 Prompt 注定失败：底座没稳就全面开工、多个子代理互相覆盖代码、写代码的人自己判卷。GAVEX 用 <b>阶梯门禁</b> + <b>非重叠 Write-Scope</b> + <b>专职独立 Verifier</b> 把多智能体执行变成零回归的闭环。</span>
+          <span class="en">One giant prompt is doomed: modules built on unstable foundations, sub-agents overwriting each other, and workers grading their own homework. GAVEX turns multi-agent execution into a zero-regression loop with <b>stage gates</b>, <b>non-overlapping Write-Scopes</b> and a <b>dedicated independent verifier</b>.</span>
+        </p>
+        <div class="cta">
+          <a class="btn primary" href="#install"><span class="zh">一键安装 Skill</span><span class="en">Install the skill</span></a>
+          <a class="btn" href="#sandbox"><span class="zh">▶ 观看工作流沙盘</span><span class="en">▶ Watch the sandbox</span></a>
+          <a class="btn" href="dashboard/index.html"><span class="zh">打开实时看板</span><span class="en">Open live dashboard</span></a>
+        </div>
+        <div class="cmd"><b>$</b><span>gavexAB <span class="zh">把 Gateway 会话调度重构为事件驱动</span><span class="en">refactor gateway scheduling to event-driven</span></span></div>
+        <div class="platforms">
+          <span class="pill mono">OpenClaw</span><span class="pill mono">Claude Code</span><span class="pill mono">OpenCode</span><span class="pill mono">Pi</span><span class="pill mono">DSH</span><span class="pill mono">Hermes</span>
+        </div>
+      </div>
+      <div class="live-card" aria-label="Live progress preview">
+        <div class="lc-head"><b><span class="zh">实时任务进度</span><span class="en">Live progress</span></b><span class="pill xs mono">run · 1404</span><span class="pill xs blue"><span class="dot"></span>LIVE</span></div>
+        <div class="lc-row"><svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="var(--violet)"/><path d="M4.7 8.2l2.1 2.1 4.5-4.6" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="t"><small>STEP 0</small><span class="zh">Main-Agent 拆解 · Write-Scope 冲突 0</span><span class="en">Plan · Write-Scope collisions 0</span></span><span class="stamp" style="color:var(--violet-fg);border-color:var(--violet-bd);background:var(--violet-bg)">PLAN_LOCKED</span></div>
+        <div class="lc-row"><svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="var(--green)"/><path d="M4.7 8.2l2.1 2.1 4.5-4.6" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="t"><small>STEP 1</small><span class="zh">底座：Schema · 迁移 · 类型</span><span class="en">Foundation: schema · migration · types</span></span><span class="stamp">STEP_1_VERIFIED_PASS ✅</span></div>
+        <div class="lc-row"><svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="var(--green)"/><path d="M4.7 8.2l2.1 2.1 4.5-4.6" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="t"><small>STEP 2</small><span class="zh">调度核心：EventBus · Scheduler</span><span class="en">Core: EventBus · Scheduler</span></span><span class="stamp">STEP_2_VERIFIED_PASS ✅</span></div>
+        <div class="lc-row rej"><svg class="ic spin" viewBox="0 0 16 16" style="color:var(--amber)"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-opacity=".22" stroke-width="1.5"/><path d="M8 1.75a6.25 6.25 0 0 1 6.25 6.25" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span class="t"><small>STEP 3</small><span class="zh">沙箱 · 审批 · 审计</span><span class="en">Sandbox · approvals · audit</span></span><span class="pill xs amber"><span class="zh">打回重修</span><span class="en">Rework</span></span></div>
+        <div class="lc-note"><svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="var(--rose)"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg><span><code>STEP_3_REJECTED → Worker 3-B</code> · <span class="zh">Verifier 3 从真实 CLI 入口复现：allow-once 被缓存为 allow-always（G1）。</span><span class="en">Verifier 3 reproduced via the real CLI: allow-once was cached as allow-always (G1).</span></span></div>
+        <div class="lc-row lock"><svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7.25" fill="none" stroke="var(--line-strong)" stroke-width="1.5"/><rect x="5.4" y="7.4" width="5.2" height="3.8" rx="1" fill="none" stroke="var(--fg-3)" stroke-width="1.2"/><path d="M6.5 7.4V6.3a1.5 1.5 0 0 1 3 0v1.1" fill="none" stroke="var(--fg-3)" stroke-width="1.2"/></svg><span class="t"><small>STEP 4</small><span class="zh">Watchdog · 等待 Step 3 签发</span><span class="en">Watchdog · waiting for Step 3</span></span><span class="pill xs">🔒 LOCKED</span></div>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><b>6</b><span><span class="zh">阶梯 Step 1 ~ 6</span><span class="en">Gated steps</span></span></div>
+      <div class="stat"><b>14</b><span><span class="zh">并行施工 Workers</span><span class="en">Parallel workers</span></span></div>
+      <div class="stat"><b>6</b><span><span class="zh">专职独立 Verifiers</span><span class="en">Independent verifiers</span></span></div>
+      <div class="stat"><b>42</b><span><span class="zh">全量守门核验 · 100% 闭合</span><span class="en">Gate probes · 100% closed</span></span></div>
+      <div class="stat"><b>0</b><span><span class="zh">交付后回归</span><span class="en">Post-delivery regressions</span></span></div>
+    </div>
+  </div>
+</header>
+
+<section class="block" id="pillars" aria-labelledby="pillarsTitle">
+  <div class="container">
+    <div class="sec-head">
+      <span class="eyebrow">00 · G-A-V-EX</span>
+      <h2 id="pillarsTitle"><span class="zh">四大支柱，一条可信执行链</span><span class="en">Four pillars. One trusted execution chain.</span></h2>
+      <p><b>Guarded Audit &amp; Verifier-gated Execution</b><br><span class="zh">G-A-V-EX 把边界、对抗审计、独立否决与阶梯执行组合成可追溯的工程协议。</span><span class="en">G-A-V-EX brings guarded boundaries, adversarial audit, independent vetoes and staged execution into one traceable engineering protocol.</span></p>
+    </div>
+    <div class="pillars">
+      <article class="pillar" data-pillar="G"><span class="letter">G</span><h3>Guarded Write-Scopes</h3><p><span class="zh">受保护的写入边界：先声明文件白名单，逐对验证互斥；越界即否决，热点文件只有一个负责人。</span><span class="en">Declare file allowlists before dispatch, verify pairwise disjointness and veto out-of-scope writes. Every hot file has one owner.</span></p></article>
+      <article class="pillar" data-pillar="A"><span class="letter">A</span><h3>Adversarial Cross-Audit</h3><p><span class="zh">异构对抗会审：独立盲审、匿名交叉质询，以真实探针关闭分歧，而非靠投票凑共识。</span><span class="en">Heterogeneous blind reviews and anonymous cross-examination close disagreements with real probes, not a majority vote.</span></p></article>
+      <article class="pillar" data-pillar="V"><span class="letter">V</span><h3>Verifier Veto Gates</h3><p><span class="zh">独立验工否决：全新上下文、只读、真实入口，全量回归不过就打回，Worker 不得给自己签发 PASS。</span><span class="en">A fresh, read-only verifier tests real entry points and the full regression suite. Workers can never sign their own PASS.</span></p></article>
+      <article class="pillar" data-pillar="EX"><span class="letter">EX</span><h3>Execution Pipeline</h3><p><span class="zh">阶梯执行流水线：先锁定方案，同阶安全并行，验工放行后才解锁下一阶；事件驱动等待，证据持续落盘。</span><span class="en">Lock the plan, parallelize safely within each step and unlock the next only after verification. Wait on events and persist evidence as work proceeds.</span></p></article>
+    </div>
+    <div class="protocol-note" id="philosophy">
+      <p><span class="zh"><b>Gavel 法槌 + Execution 执行</b>：法槌代表独立裁决与一票否决，Execution 代表受门禁约束的真实施工。先守界、后执行；先有证据、再落槌，不把“已完成”当作验收。</span><span class="en"><b>Gavel + Execution</b>: the gavel stands for independent judgment and veto power; execution means real work constrained by those gates. Guard first, execute next. Evidence comes before the verdict — “done” is not proof.</span></p>
+      <p><span class="zh">成功终态为 <code>GAVEX_FINAL_ACCEPTED</code>；无法安全继续时签发 <code>GAVEX_ESCALATED</code> 并转人工，绝不伪装通过。每次裁决与证据写入 <code>.gavex/ledger.md</code>。</span><span class="en">Success ends with <code>GAVEX_FINAL_ACCEPTED</code>. If safe progress is impossible, issue <code>GAVEX_ESCALATED</code> for human intervention — never a false pass. Record verdicts and evidence in <code>.gavex/ledger.md</code>.</span></p>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="why">
+  <div class="container">
+    <div class="sec-head">
+      <span class="eyebrow">01 · Why</span>
+      <h2><span class="zh">为什么单次巨型 Prompt 必败</span><span class="en">Why a single mega-prompt fails</span></h2>
+      <p><span class="zh">问题不在模型不够聪明，而在执行结构：没有阶梯、没有边界、没有独立裁判。</span><span class="en">The model isn't the problem — the execution structure is: no stages, no boundaries, no independent referee.</span></p>
+    </div>
+    <div class="vs">
+      <div class="vs-card bad">
+        <h3><span class="pill rose mono">✕</span><span class="zh">单次巨型 Prompt / 普通子代理群发</span><span class="en">Mega-prompt / naive sub-agent fan-out</span></h3>
+        <div class="mono-blob">"<span class="zh">一次性把 12 个模块全部改完，写测试并确认 100% 通过</span><span class="en">Change all 12 modules at once, write tests and confirm 100% passing</span>"</div>
+        <ul class="vs-list">
+          <li><span class="mk">1</span><div><b><span class="zh">一锅端大爆炸</span><span class="en">Big-bang blast radius</span></b><p><span class="zh">底座没稳，后续模块全部建立在错误假设上盲改。</span><span class="en">Foundations aren't stable, so every later module is built on wrong assumptions.</span></p></div></li>
+          <li><span class="mk">2</span><div><b><span class="zh">并发踩踏</span><span class="en">Write-Scope collisions</span></b><p><span class="zh">多个 Worker 同时改同一个文件、争同一个锁，互相覆盖。</span><span class="en">Several workers edit the same file or lock and silently overwrite each other.</span></p></div></li>
+          <li><span class="mk">3</span><div><b><span class="zh">运动员兼裁判</span><span class="en">Self-grading hallucination</span></b><p><span class="zh">Worker 跑个假测试就宣称完成，主代理直接转述，用户一跑全崩。</span><span class="en">Workers run a fake test, claim "done", the main agent relays it — and it breaks for the user.</span></p></div></li>
+        </ul>
+      </div>
+      <div class="vs-card good">
+        <h3><span class="pill green mono">✓</span><span class="zh">GAVEX 阶梯门禁 + 独立验工</span><span class="en">GAVEX stage gates + independent verification</span></h3>
+        <div class="mono-blob">Step 1 → <span style="color:var(--green-fg)">STEP_1_VERIFIED_PASS</span> → Step 2 → … → <span style="color:var(--violet-fg)">GAVEX_FINAL_ACCEPTED</span></div>
+        <ul class="vs-list">
+          <li><span class="mk">1</span><div><b><span class="zh">阶梯扣留</span><span class="en">Stage-gated planning</span></b><p><span class="zh">Step K 未拿到独立签发的 PASS 印章前，Step K+1 一律锁定。</span><span class="en">Step K+1 stays locked until Step K earns an independently signed PASS.</span></p></div></li>
+          <li><span class="mk">2</span><div><b><span class="zh">非重叠 Write-Scope 并行</span><span class="en">Non-overlapping parallelism</span></b><p><span class="zh">同阶 Worker 白名单两两求交为空，热点文件唯一归属。</span><span class="en">Same-step Write-Scopes have empty pairwise intersections; hot files have one owner.</span></p></div></li>
+          <li><span class="mk">3</span><div><b><span class="zh">专职独立 Verifier</span><span class="en">Dedicated independent verifier</span></b><p><span class="zh">全新上下文、只读、真实入口实跑；有瑕疵就打回，直到全绿。</span><span class="en">Fresh context, read-only, real entry points; any defect bounces back until all green.</span></p></div></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="sandbox-section">
+  <div class="container">
+    <div class="sec-head">
+      <span class="eyebrow">02 · Interactive sandbox</span>
+      <h2><span class="zh">交互式工作流沙盘</span><span class="en">Interactive workflow sandbox</span></h2>
+      <p><span class="zh">Main-Agent 拆分 → Worker 并行 → Verifier 打回 → 定点重修 → 闯关解锁。打开「注入缺陷」看一次完整的打回闭环。</span><span class="en">Main-Agent splits → workers run in parallel → verifier rejects → targeted rework → gate unlocks. Toggle “inject defects” to see the full rework loop.</span></p>
+    </div>
+    <div class="sandbox" id="sandbox" data-phase="idle">
+      <div class="sb-bar">
+        <button type="button" class="btn sm primary" id="sbPlay"><span class="zh">▶ 运行</span><span class="en">▶ Run</span></button>
+        <button type="button" class="btn sm" id="sbReset"><span class="zh">↺ 重置</span><span class="en">↺ Reset</span></button>
+        <label class="toggle"><input type="checkbox" id="sbDefect" checked><span class="zh">注入缺陷（触发打回）</span><span class="en">Inject defects (trigger rejects)</span></label>
+        <span class="grow"></span>
+        <span class="pill xs mono" id="sbStatus">idle</span>
+      </div>
+      <div class="sb-body">
+        <div class="sb-stage">
+          <div class="sb-main"><b>Main-Agent</b><span class="zh">依赖分析 · 阶梯拆解 · Write-Scope 矩阵</span><span class="en">dependency analysis · stage plan · Write-Scope matrix</span>
+            <div class="sb-plan" id="sbPlan"></div>
+          </div>
+          <div class="sb-steps" id="sbSteps"></div>
+        </div>
+        <div class="sb-log"><h4><span class="zh">事件日志</span><span class="en">Event log</span></h4><ol id="sbLog"></ol></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="gates">
+  <div class="container">
+    <div class="sec-head">
+      <span class="eyebrow">03 · Veto gates</span>
+      <h2><span class="zh">四大一票否决硬门禁</span><span class="en">Four hard veto gates</span></h2>
+      <p><span class="zh">任一门禁失败，整阶签发 <code>STEP_K_REJECTED</code>，缺陷精准归属到 Worker K-X 定点重修；复核必须全量重跑。</span><span class="en">Any failing gate rejects the whole step with <code>STEP_K_REJECTED</code>; the defect is routed to the owning Worker K-X, and the recheck reruns everything.</span></p>
+    </div>
+    <div class="gates">
+      <article class="gate">
+        <div class="gid"><b>G1</b><span class="pill xs rose">VETO</span></div>
+        <h3><span class="zh">真实入口 · 拒绝白盒注入</span><span class="en">Real entry points only</span></h3>
+        <p><span class="zh">必须从 CLI / HTTP / UI / 公开 API 端到端触发；禁止改内存状态、mock 被测对象或手写假数据。</span><span class="en">Trigger end-to-end through CLI / HTTP / UI / public API. No poking in-memory state, no mocking the subject, no hand-made fixtures as proof.</span></p>
+        <pre>curl -sf :8080/api/sessions
+pnpm e2e --reporter=line</pre>
+      </article>
+      <article class="gate">
+        <div class="gid"><b>G2</b><span class="pill xs rose">VETO</span></div>
+        <h3><span class="zh">多视口 × 深浅色真实渲染</span><span class="en">Multi-viewport × theme render</span></h3>
+        <p><span class="zh">涉及前端：≥ 3 个视口 × 深浅两色真实渲染截图，核验溢出、几何对齐、对比度与控制台报错。</span><span class="en">For UI: real renders at ≥ 3 viewports × light/dark, checking overflow, geometry, contrast and console errors.</span></p>
+        <pre># 390 / 1024 / 1440 × dark / light
+console.error = 0
+overflow-x    = 0px</pre>
+      </article>
+      <article class="gate">
+        <div class="gid"><b>G3</b><span class="pill xs rose">VETO</span></div>
+        <h3><span class="zh">Dry-run 零破坏</span><span class="en">Dry-run, zero damage</span></h3>
+        <p><span class="zh">涉及配置、数据库、迁移或外部服务，必须先干跑并对比前后快照，确认无破坏性写入。</span><span class="en">For config, databases, migrations or external services: dry-run first and diff snapshots to prove no destructive writes.</span></p>
+        <pre># expect: 0 destructive DDL
+migrate --dry-run
+# expect: 0 to destroy
+terraform plan</pre>
+      </article>
+      <article class="gate">
+        <div class="gid"><b>G4</b><span class="pill xs rose">VETO</span></div>
+        <h3><span class="zh">需求不缩水</span><span class="en">No silent scope cuts</span></h3>
+        <p><span class="zh">逐条映射原始需求与证据；任何「先跳过」「改成 TODO」「降级占位」都判定失败。</span><span class="en">Map every requirement to evidence. “Skip for now”, “TODO” or placeholder downgrades are failures.</span></p>
+        <pre>requirements ↔ evidence: 9/9
+git diff --name-only ⊆ Write-Scope</pre>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="modes">
+  <div class="container">
+    <div class="sec-head">
+      <span class="eyebrow">04 · Modes</span>
+      <h2><span class="zh">三种呼出模式</span><span class="en">Three invocation modes</span></h2>
+      <p><span class="zh">在任意支持 Skill 的 Agent 中直接输入指令即可呼出。</span><span class="en">Type the command in any agent that supports skills.</span></p>
+    </div>
+    <div class="modes">
+      <article class="mode">
+        <span class="cmdname">gavexA</span>
+        <span class="pill xs violet" style="justify-self:start"><span class="zh">3+1 异构对抗会审</span><span class="en">3+1 adversarial cross-audit</span></span>
+        <p><span class="zh">3 席异构模型独立盲审、匿名交叉质询、实证探针闭合，动态收敛到 <code>UNCONDITIONAL_CONSENSUS</code>。</span><span class="en">Three heterogeneous models review blind, cross-examine anonymously and close every claim with probes, converging on <code>UNCONDITIONAL_CONSENSUS</code>.</span></p>
+        <ul>
+          <li><svg viewBox="0 0 14 14"><path d="M3 7.3l2.6 2.6L11 4.3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span class="zh">疑难 Bug 根因定位</span><span class="en">Root-causing hard bugs</span></li>
+          <li><svg viewBox="0 0 14 14"><path d="M3 7.3l2.6 2.6L11 4.3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span class="zh">架构方案抉择 / 事故复盘</span><span class="en">Architecture decisions / postmortems</span></li>
+        </ul>
+        <code class="ex">gavexA <span class="zh">为什么 200 并发下会重复派工？</span><span class="en">why do we double-dispatch at 200 sessions?</span></code>
+      </article>
+      <article class="mode">
+        <span class="cmdname">gavexB</span>
+        <span class="pill xs blue" style="justify-self:start"><span class="zh">阶梯门禁并行施工</span><span class="en">Stage-gated parallel build</span></span>
+        <p><span class="zh">Step 1..N 严格串行解锁；同阶 Worker K-A/B/C 非重叠并行；Verifier K 一票否决，打回直至 <code>STEP_K_VERIFIED_PASS</code>。</span><span class="en">Steps unlock strictly in order; Workers K-A/B/C run in parallel with disjoint scopes; Verifier K vetoes until <code>STEP_K_VERIFIED_PASS</code>.</span></p>
+        <ul>
+          <li><svg viewBox="0 0 14 14"><path d="M3 7.3l2.6 2.6L11 4.3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span class="zh">多模块重构 / 新功能落地</span><span class="en">Multi-module refactors / features</span></li>
+          <li><svg viewBox="0 0 14 14"><path d="M3 7.3l2.6 2.6L11 4.3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span class="zh">迁移与发布加固</span><span class="en">Migrations &amp; release hardening</span></li>
+        </ul>
+        <code class="ex">gavexB <span class="zh">补齐 Dashboard 面板与数据接口</span><span class="en">ship the dashboard panel and its API</span> --max-workers=3</code>
+      </article>
+      <article class="mode feature">
+        <span class="cmdname">gavexAB</span>
+        <span class="pill xs violet" style="justify-self:start"><span class="zh">全套闭环</span><span class="en">Full loop</span></span>
+        <p><span class="zh">先会审得出被共识的方案，再作为 Step 0 输入阶梯施工，最后由 Main-Agent 独立总验收 <code>GAVEX_FINAL_ACCEPTED</code>。</span><span class="en">Audit first to reach a consensus plan, feed it into Step 0, then build in gated steps and finish with <code>GAVEX_FINAL_ACCEPTED</code>.</span></p>
+        <ul>
+          <li><svg viewBox="0 0 14 14"><path d="M3 7.3l2.6 2.6L11 4.3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span class="zh">高风险大工程</span><span class="en">High-risk, large projects</span></li>
+          <li><svg viewBox="0 0 14 14"><path d="M3 7.3l2.6 2.6L11 4.3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span class="zh">方案未定 + 施工量大</span><span class="en">Unsettled design + heavy build</span></li>
+        </ul>
+        <code class="ex">gavexAB <span class="zh">把 Gateway 会话调度重构为事件驱动</span><span class="en">refactor gateway scheduling to event-driven</span></code>
+      </article>
+    </div>
+
+    <div class="table-wrap" style="margin-top:28px">
+      <table>
+        <thead><tr><th><span class="zh">维度</span><span class="en">Dimension</span></th><th><span class="zh">普通 Sub-agent 调度</span><span class="en">Typical sub-agent dispatch</span></th><th>GAVEX</th></tr></thead>
+        <tbody>
+          <tr><td><span class="zh">任务拆分</span><span class="en">Decomposition</span></td><td><span class="n">✕</span> <span class="zh">一次性全部派出</span><span class="en">Everything dispatched at once</span></td><td><span class="y">✓</span> <span class="zh">Step 1..N 依赖阶梯，严格按序解锁</span><span class="en">Dependency-ordered steps, strict unlock order</span></td></tr>
+          <tr><td><span class="zh">并发安全</span><span class="en">Concurrency safety</span></td><td><span class="n">✕</span> <span class="zh">无写入边界，互相覆盖</span><span class="en">No write boundaries; overwrites</span></td><td><span class="y">✓</span> <span class="zh">非重叠 Write-Scope 白名单 + 越界即否决</span><span class="en">Disjoint Write-Scope allowlists; out-of-scope = veto</span></td></tr>
+          <tr><td><span class="zh">验收方式</span><span class="en">Acceptance</span></td><td><span class="n">✕</span> <span class="zh">Worker 自评，主代理转述</span><span class="en">Self-reported by workers, relayed</span></td><td><span class="y">✓</span> <span class="zh">专职独立 Verifier，全新上下文只读实跑</span><span class="en">Dedicated read-only verifier in a fresh context</span></td></tr>
+          <tr><td><span class="zh">缺陷处理</span><span class="en">Defects</span></td><td><span class="n">✕</span> <span class="zh">交付后由用户发现</span><span class="en">Found by the user after delivery</span></td><td><span class="y">✓</span> <span class="zh">定点打回 Worker K-X，全量复核后才解锁</span><span class="en">Routed to Worker K-X; full recheck before unlock</span></td></tr>
+          <tr><td><span class="zh">等待方式</span><span class="en">Waiting</span></td><td><span class="n">✕</span> <span class="zh">sleep 轮询 / 无限等待</span><span class="en">sleep-polling or hanging forever</span></td><td><span class="y">✓</span> <span class="zh">事件驱动 + 5 分钟低频巡检 + Steer 收拢</span><span class="en">Event-driven + 5-min patrol + steer to submit</span></td></tr>
+          <tr><td><span class="zh">可追溯性</span><span class="en">Traceability</span></td><td><span class="n">✕</span> <span class="zh">散落在对话里</span><span class="en">Scattered across chat</span></td><td><span class="y">✓</span> <span class="zh">台账 ledger + 判定令牌 + 可视化看板</span><span class="en">Ledger + verdict tokens + visual dashboard</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="install">
+  <div class="container">
+    <div class="sec-head">
+      <span class="eyebrow">05 · Install</span>
+      <h2><span class="zh">跨平台一键安装</span><span class="en">One-line install, any agent</span></h2>
+      <p><span class="zh">GAVEX 是一个单文件 <code>SKILL.md</code>，工作区入口是 <code>skills/gavex/SKILL.md</code>，源码放在 <code>~/Developer/GAVEX</code>，运行台账写入 <code>.gavex/ledger.md</code>。只依赖 spawn / wait / run 三种原语；没有子代理能力的平台自动降级为单 Agent 串行模式。</span><span class="en">GAVEX is a single <code>SKILL.md</code> installed at <code>skills/gavex/SKILL.md</code>, with sources in <code>~/Developer/GAVEX</code> and the run ledger at <code>.gavex/ledger.md</code>. It relies only on spawn / wait / run. Platforms without sub-agents fall back to a single-agent serial mode.</span></p>
+    </div>
+    <div class="install">
+      <div class="tabs" role="tablist" aria-label="Platforms" id="tabs"></div>
+      <div id="tabPanels"></div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="dashboard">
+  <div class="container">
+    <div class="sec-head">
+      <span class="eyebrow">06 · Dashboard</span>
+      <h2><span class="zh">阶梯施工与三方会审看板</span><span class="en">Stage-gate &amp; cross-audit dashboard</span></h2>
+      <p><span class="zh">全局 KPI、实时进度卡、Watchdog 时间线、双栏门禁泳道——单文件 HTML，无依赖，可直接喂入 ledger 数据。</span><span class="en">Global KPIs, live progress, a watchdog timeline and dual-column gate swimlanes — one dependency-free HTML file you can feed with ledger data.</span></p>
+    </div>
+    <div class="frame">
+      <div class="frame-bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">dashboard/index.html?mode=gavexAB</span><a class="btn sm" href="dashboard/index.html" target="_blank" rel="noopener"><span class="zh">全屏打开 ↗</span><span class="en">Open full ↗</span></a></div>
+      <iframe id="dashFrame" title="GAVEX dashboard live preview" loading="lazy" src="dashboard/index.html?mode=gavexAB"></iframe>
+    </div>
+  </div>
+</section>
+
+<footer class="site">
+  <div class="container">
+    <span>GAVEX — Guarded Audit &amp; Verifier-gated Execution</span>
+    <span><a href="dashboard/index.html">Dashboard</a> · <a id="ghFoot" href="#install">GitHub</a></span>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+  var root = document.documentElement;
+  var q = new URLSearchParams(location.search);
+  var reduced = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function isEn() { return root.lang === 'en'; }
+  function L(zh, en) { return '<span class="zh">' + zh + '</span><span class="en">' + en + '</span>'; }
+
+  /* ---------- repo detection (GitHub Pages) ---------- */
+  var owner = '<owner>', repo = 'GAVEX';
+  if (/\.github\.io$/.test(location.hostname)) {
+    owner = location.hostname.split('.')[0];
+    var seg = location.pathname.split('/').filter(Boolean)[0];
+    if (seg && seg !== 'index.html') repo = seg;
+  }
+  var REPO_URL = 'https://github.com/' + owner + '/' + repo;
+  var RAW = 'https://raw.githubusercontent.com/' + owner + '/' + repo + '/main';
+  if (owner !== '<owner>') { $('#ghLink').href = REPO_URL; $('#ghFoot').href = REPO_URL; }
+
+  /* ---------- theme & language ---------- */
+  var SUN = '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+  var MOON = '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.2 10.1A5.6 5.6 0 0 1 5.9 2.8a5.6 5.6 0 1 0 7.3 7.3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>';
+  function paintTheme() { $('#themeBtn').innerHTML = root.getAttribute('data-theme') === 'dark' ? SUN : MOON; }
+  function syncFrame() {
+    var f = $('#dashFrame');
+    var src = 'dashboard/index.html?mode=gavexAB&theme=' + root.getAttribute('data-theme') + (q.get('static') ? '&replay=0' : '');
+    if (f.getAttribute('src') !== src) f.setAttribute('src', src);
+  }
+  $('#themeBtn').addEventListener('click', function () {
+    var t = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', t);
+    try { localStorage.setItem('gavex-theme', t); } catch (e) {}
+    paintTheme(); paintLanguage(); syncFrame();
+  });
+  function paintLanguage() {
+    document.title = isEn() ? 'GAVEX — Guarded Audit & Verifier-gated Execution' : 'GAVEX — 守界审计与验工门控执行';
+    $('#langBtn').setAttribute('aria-label', isEn() ? '切换到中文' : 'Switch to English');
+  }
+  $('#langBtn').addEventListener('click', function () {
+    root.lang = isEn() ? 'zh-CN' : 'en';
+    try { localStorage.setItem('gavex-lang', isEn() ? 'en' : 'zh'); } catch (e) {}
+    paintLanguage();
+  });
+  paintTheme(); paintLanguage(); syncFrame();
+
+  /* ---------- install tabs ---------- */
+  var PLATFORMS = [
+    { id: 'openclaw', name: 'OpenClaw', badge: 'OC', dir: '~/.openclaw/skills/gavex',
+      note: L('也可放在工作区 <code>skills/gavex/SKILL.md</code>。GAVEX 会用 <code>sessions_spawn</code> 批量派工，用 <code>agents_wait</code> 事件驱动等待，Watchdog 通过 steer 收拢交卷。', 'Or place it in the workspace at <code>skills/gavex/SKILL.md</code>. GAVEX dispatches with <code>sessions_spawn</code>, waits event-driven with <code>agents_wait</code>, and the watchdog steers stalled workers.'),
+      usage: 'gavexAB 把 Gateway 会话调度重构为事件驱动' },
+    { id: 'claude', name: 'Claude Code', badge: 'CC', dir: '~/.claude/skills/gavex',
+      note: L('项目级安装放到 <code>.claude/skills/gavex/</code>。同一条消息内并行多个 <code>Task</code> 即为同阶并行派工；建议为 Verifier 定义只读 + Bash 的独立 subagent。', 'For project scope use <code>.claude/skills/gavex/</code>. Parallel <code>Task</code> calls in one message form a step; define the verifier as a separate read-only + Bash subagent.'),
+      usage: 'gavexB ship the dashboard panel and its API --max-workers=3' },
+    { id: 'opencode', name: 'OpenCode', badge: 'OP', dir: '~/.config/opencode/skills/gavex',
+      note: L('项目级安装放到 <code>.opencode/skills/gavex/</code>。可为 Verifier 子代理配置 <code>edit: deny</code> 权限，物理上杜绝"顺手修好"。', 'For project scope use <code>.opencode/skills/gavex/</code>. Give the verifier subagent <code>edit: deny</code> so it physically cannot “just fix it”.'),
+      usage: 'gavexA why do we double-dispatch at 200 sessions?' },
+    { id: 'pi', name: 'Pi', badge: 'Pi', dir: '~/.pi/agent/skills/gavex',
+      note: L('有 sub-agent 扩展时按并行模式运行；否则自动降级为单 Agent 串行模式，并在报告中标注 <code>degraded: single-agent</code>。', 'Runs in parallel mode with a sub-agent extension; otherwise it degrades to single-agent serial mode and marks <code>degraded: single-agent</code>.'),
+      usage: 'gavexB migrate the storage layer to append-only events' },
+    { id: 'dsh', name: 'DSH', badge: 'DS', dir: '${DSH_SKILLS_DIR:-~/.dsh/skills}/gavex',
+      note: L('以 DSH 实际配置的 skills 目录为准。GAVEX 只依赖 spawn / wait / run 三种原语，映射到 DSH 的 delegate 与 join 能力即可。', 'Use whatever skills directory your DSH install is configured with. GAVEX only needs spawn / wait / run, mapped onto DSH delegate and join.'),
+      usage: 'gavexAB harden the release pipeline' },
+    { id: 'hermes', name: 'Hermes', badge: 'HE', dir: '~/.hermes/skills/gavex',
+      note: L('用 <code>delegate_task</code> 等子代理工具派工；建议 Verifier 使用与 Worker 不同的 provider，降低同质错误。', 'Dispatch with sub-agent tools such as <code>delegate_task</code>; give the verifier a different provider than the workers to avoid correlated errors.'),
+      usage: 'gavexB add audit logging with secret redaction' }
+  ];
+  function installCode(p) {
+    var d = esc(p.dir);
+    return '<span class="c"># ' + p.name + '</span>\nmkdir -p ' + d + '\ncurl -fsSL ' + esc(RAW) + '/SKILL.md -o ' + d + '/SKILL.md';
+  }
+  function cloneCode(p) {
+    var d = esc(p.dir);
+    return '<span class="c"># git clone + symlink (stays up to date with git pull)</span>\ngit clone ' + esc(REPO_URL) + '.git ~/Developer/GAVEX\nmkdir -p "$(dirname ' + d + ')"\nln -sfn ~/Developer/GAVEX ' + d;
+  }
+  function codeBlock(label, html) {
+    return '<div class="code"><div class="lbl"><span>' + label + '</span><button type="button" class="copy" data-copy>' + L('复制', 'Copy') + '</button></div><pre>' + html + '</pre></div>';
+  }
+  $('#tabs').innerHTML = PLATFORMS.map(function (p, i) {
+    return '<button type="button" role="tab" id="tab-' + p.id + '" data-tab="' + p.id + '" aria-controls="panel-' + p.id + '" aria-selected="' + (i === 0) + '" tabindex="' + (i === 0 ? 0 : -1) + '"><span class="badge">' + p.badge + '</span>' + p.name + '</button>';
+  }).join('');
+  $('#tabPanels').innerHTML = PLATFORMS.map(function (p, i) {
+    return '<div class="tab-panel" role="tabpanel" id="panel-' + p.id + '" aria-labelledby="tab-' + p.id + '"' + (i ? ' hidden' : '') + '>' +
+      '<h3>' + p.name + '</h3><p>' + p.note + '</p>' +
+      codeBlock('INSTALL · curl', installCode(p)) +
+      codeBlock('INSTALL · git', cloneCode(p)) +
+      codeBlock('INVOKE', '<span class="c"># ' + L('在 ' + p.name + ' 会话中输入', 'type in a ' + p.name + ' session') + '</span>\n' + esc(p.usage)) +
+      '</div>';
+  }).join('');
+  function selectTab(id, focus) {
+    $$('[data-tab]').forEach(function (b) {
+      var on = b.getAttribute('data-tab') === id;
+      b.setAttribute('aria-selected', String(on)); b.tabIndex = on ? 0 : -1;
+      if (on && focus) b.focus();
+    });
+    $$('.tab-panel').forEach(function (pn) { pn.hidden = pn.id !== 'panel-' + id; });
+  }
+  $('#tabs').addEventListener('click', function (e) { var b = e.target.closest('[data-tab]'); if (b) selectTab(b.getAttribute('data-tab')); });
+  $('#tabs').addEventListener('keydown', function (e) {
+    var ids = PLATFORMS.map(function (p) { return p.id; });
+    var cur = ids.indexOf(document.activeElement.getAttribute('data-tab'));
+    if (cur < 0) return;
+    var d = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
+    if (d) { e.preventDefault(); selectTab(ids[(cur + d + ids.length) % ids.length], true); }
+  });
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-copy]');
+    if (!b) return;
+    var text = b.closest('.code').querySelector('pre').textContent;
+    var done = function () { b.classList.add('ok'); b.innerHTML = L('已复制 ✓', 'Copied ✓'); setTimeout(function () { b.classList.remove('ok'); b.innerHTML = L('复制', 'Copy'); }, 1400); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, done); else done();
+  });
+
+  /* ---------- workflow sandbox ---------- */
+  var SB = [
+    { k: 1, name: L('底座', 'Foundation'), workers: [['A', 'src/config/**'], ['B', 'migrations/**'], ['C', 'packages/types/**']], defect: 'B', why: L('G3 · 迁移干跑含 DROP COLUMN', 'G3 · dry-run shows DROP COLUMN') },
+    { k: 2, name: L('调度核心', 'Core'), workers: [['A', 'src/runtime/eventBus.ts'], ['B', 'src/runtime/scheduler.ts']], defect: null },
+    { k: 3, name: L('审批与审计', 'Approvals'), workers: [['A', 'src/approvals/**'], ['B', 'src/audit/**'], ['C', 'src/tools/sandbox/**']], defect: 'A', why: L('G1 · 真实 CLI 复现 allow-once 失效', 'G1 · real CLI: allow-once broken') }
+  ];
+  var IC = {
+    idle: '<svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="var(--line-strong)" stroke-width="1.5"/></svg>',
+    ok: '<svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="var(--green)"/><path d="M4.7 8.2l2.1 2.1 4.5-4.6" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    okB: '<svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="var(--blue)"/><path d="M4.7 8.2l2.1 2.1 4.5-4.6" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    bad: '<svg class="ic" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="var(--rose)"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>',
+    spin: function (c) { return '<svg class="ic spin" viewBox="0 0 16 16" style="color:var(--' + c + ')"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-opacity=".22" stroke-width="1.5"/><path d="M8 1.75a6.25 6.25 0 0 1 6.25 6.25" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>'; }
+  };
+  var sb = $('#sandbox'), sbTok = 0, sbT = 0;
+  function sbWait(ms) { var t = sbTok; return new Promise(function (res, rej) { setTimeout(function () { t === sbTok ? res() : rej('cancel'); }, reduced ? 0 : ms); }); }
+  function sbLog(tag, color, html) {
+    sbT += 1;
+    var li = document.createElement('li');
+    li.innerHTML = '<time>t+' + String(sbT).padStart(2, '0') + '</time><span class="pill xs mono ' + color + '">' + tag + '</span><span>' + html + '</span>';
+    $('#sbLog').insertBefore(li, $('#sbLog').firstChild);
+  }
+  function sbBuild() {
+    $('#sbPlan').innerHTML = SB.map(function (s) { return '<span class="pill xs mono violet">Step ' + s.k + '</span>'; }).join('') + '<span class="pill xs mono green">∩ = ∅</span>';
+    $('#sbSteps').innerHTML = SB.map(function (s, i) {
+      return '<div class="sb-step locked" id="sbs' + i + '"><div class="h"><span><small>STEP ' + s.k + '</small> ' + s.name + '</span><span id="sbsp' + i + '"><span class="pill xs">🔒</span></span></div>' +
+        '<div class="sb-workers">' + s.workers.map(function (w) { return '<div class="sbw" id="sbw' + i + w[0] + '">' + IC.idle + '<span>Worker ' + s.k + '-' + w[0] + '</span><code>' + w[1] + '</code></div>'; }).join('') + '</div>' +
+        '<div class="sbv" id="sbv' + i + '">' + IC.idle + '<span>Verifier ' + s.k + '</span></div></div>';
+    }).join('') + '<div class="sb-final locked" id="sbFinal">' + IC.idle + '<b>Final</b><span>' + L('Main-Agent 总验收', 'Main-Agent acceptance') + '</span></div>';
+    $('#sbLog').innerHTML = ''; sbT = 0;
+    sb.dataset.phase = 'idle'; $('#sbStatus').textContent = 'idle';
+  }
+  function setW(i, x, cls, icon) { var el = $('#sbw' + i + x); el.className = 'sbw ' + cls; el.firstChild.outerHTML = icon; }
+  function setV(i, cls, icon, label) { var el = $('#sbv' + i); el.className = 'sbv ' + cls; el.innerHTML = icon + '<span>' + label + '</span>'; }
+  function runStep(i, inject) {
+    var s = SB[i], defect = inject ? s.defect : null, box = $('#sbs' + i);
+    box.className = 'sb-step active';
+    $('#sbsp' + i).innerHTML = '<span class="pill xs blue">' + L('施工', 'build') + '</span>';
+    s.workers.forEach(function (w) { setW(i, w[0], 'run', IC.spin('blue')); });
+    sbLog('SPAWN', 'blue', L('并行派工 ', 'dispatch ') + s.workers.map(function (w) { return s.k + '-' + w[0]; }).join(' / ') + L('，Write-Scope 互斥', ', disjoint scopes'));
+    var p = sbWait(500);
+    s.workers.forEach(function (w, j) { p = p.then(function () { return sbWait(260 + j * 80); }).then(function () { setW(i, w[0], 'done', IC.okB); }); });
+    return p.then(function () {
+      setV(i, 'run', IC.spin('green'), 'Verifier ' + s.k + L(' 实跑探针…', ' probing…'));
+      sbLog('VERIFY', 'green', 'Verifier ' + s.k + L('：全新上下文 · 只读 · G1–G4', ': fresh ctx · read-only · G1–G4'));
+      return sbWait(900);
+    }).then(function () {
+      if (!defect) return;
+      setV(i, 'rej', IC.bad, 'STEP_' + s.k + '_REJECTED');
+      sbLog('REJECT', 'rose', s.why + ' → Worker ' + s.k + '-' + defect);
+      setW(i, defect, 'rework', IC.spin('amber'));
+      $('#sbsp' + i).innerHTML = '<span class="pill xs amber">' + L('重修', 'rework') + '</span>';
+      return sbWait(1200).then(function () {
+        setW(i, defect, 'done', IC.okB);
+        sbLog('FIX', 'amber', 'Worker ' + s.k + '-' + defect + L(' 定点重修交卷（Write-Scope 不变）', ' resubmits (same scope)'));
+        setV(i, 'run', IC.spin('green'), 'Verifier ' + s.k + L('′ 全量复核…', '′ full recheck…'));
+        return sbWait(900);
+      });
+    }).then(function () {
+      setV(i, 'pass', IC.ok, '<span class="stamp in">STEP_' + s.k + '_VERIFIED_PASS</span>');
+      box.className = 'sb-step pass';
+      $('#sbsp' + i).innerHTML = '<span class="pill xs green">🔓</span>';
+      sbLog('PASS', 'green', 'STEP_' + s.k + '_VERIFIED_PASS · ' + (i < SB.length - 1 ? L('解锁 Step ', 'unlock Step ') + (s.k + 1) : L('移交总验收', 'hand to final')));
+      return sbWait(500);
+    });
+  }
+  function sbRun() {
+    sbTok++; sbBuild();
+    var inject = $('#sbDefect').checked;
+    sb.dataset.phase = 'running'; $('#sbStatus').textContent = 'running';
+    $('#sbPlay').disabled = true;
+    sbLog('PLAN', 'violet', L('Main-Agent 拆解 3 个阶梯，Write-Scope 两两求交 = ∅', 'Main-Agent plans 3 steps; pairwise Write-Scope ∩ = ∅'));
+    var p = Promise.resolve();
+    $$('#sbPlan .pill').forEach(function (el) { p = p.then(function () { return sbWait(220); }).then(function () { el.classList.add('on'); }); });
+    SB.forEach(function (_, i) { p = p.then(function () { return runStep(i, inject); }); });
+    p.then(function () {
+      var f = $('#sbFinal'); f.className = 'sb-final pass'; f.firstChild.outerHTML = IC.ok;
+      f.insertAdjacentHTML('beforeend', '<span class="stamp in" style="color:var(--violet-fg);border-color:var(--violet-bd);background:var(--violet-bg)">GAVEX_FINAL_ACCEPTED</span>');
+      sbLog('FINAL', 'violet', L('真实入口全链路 + 全量回归 → GAVEX_FINAL_ACCEPTED', 'real entry end-to-end + full regression → GAVEX_FINAL_ACCEPTED'));
+      sb.dataset.phase = 'done'; $('#sbStatus').textContent = 'done'; $('#sbPlay').disabled = false;
+    }, function () {});
+  }
+  $('#sbPlay').addEventListener('click', sbRun);
+  $('#sbReset').addEventListener('click', function () { sbTok++; sbBuild(); $('#sbPlay').disabled = false; });
+  sbBuild();
+  if (!q.get('static') && !reduced && 'IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (es) {
+      if (es.some(function (e) { return e.isIntersecting; }) && sb.dataset.phase === 'idle') { sbRun(); io.disconnect(); }
+    }, { threshold: .35 });
+    io.observe(sb);
+  }
+})();
+</script>
+</body>
+</html>
