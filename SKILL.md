@@ -1,6 +1,7 @@
 ---
 name: gavex
 description: "GAVEX: Guarded Audit & Verifier-gated EXecution. Use for risky multi-module refactors, cross-file features, migrations, release hardening and hard bugs requiring adversarial cross-audit. The main agent plans Step 1..N, dispatches disjoint Write-Scope workers per step, then an independent Verifier applies G1-G4 and requires STEP_K_VERIFIED_PASS before the next step. Activation phrases: gavex, gavexA, gavexB, gavexAB, 阶梯门禁, 并行施工, 独立验工, 对抗会审."
+license: MIT
 metadata:
   version: "2.0.0"
   default_mode: gavexB

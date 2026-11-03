@@ -1,5 +1,7 @@
 # GAVEX
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+
 **G**uarded **A**udit & **V**erifier-gated **EX**ecution
 
 **让子代理在互斥边界内并行施工，让独立守门员握着法槌一票否决**
@@ -343,3 +345,11 @@ GAVEX/
     ├── validate.mjs         # 静态结构与协议完整性校验脚本
     └── render-check.mjs     # 多视口渲染与交互回归校验脚本
 ```
+
+## 许可证 / License
+
+Copyright (c) 2026 MitsukiJoe.
+
+本仓库原创 Skill 协议、代码和文档采用 [MIT License](./LICENSE) 发布。第三方材料如有单独标注，仍遵循其原有许可证。
+
+The original skill protocol, code, and documentation in this repository are licensed under the [MIT License](./LICENSE). Separately identified third-party materials retain their respective licences.
