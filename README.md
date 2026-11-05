@@ -1,5 +1,7 @@
 # GAVEX
 
+![GAVEX Banner](docs/assets/banner.png)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
 **G**uarded **A**udit & **V**erifier-gated **EX**ecution
